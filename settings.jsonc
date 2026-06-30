@@ -1,0 +1,116 @@
+{
+    // ===== Paths =====
+    // Directory containing native binaries (jbig2enc, etc.).
+    // Override via --native-dir CLI flag.
+    "native.dir": "./native",
+
+    // Directory containing Tesseract language data (*.traineddata).
+    // Override via --tessdata-dir CLI flag or TESSDATA_PREFIX env var.
+    "tessdata.dir": "./tessdata",
+
+    // Path to the Tesseract executable.
+    // Default points to the project-local wrapper in native/linux/,
+    // which sets TESSDATA_PREFIX to ./tessdata/ before delegating to
+    // the system Tesseract.  Fallback: "tesseract" (on PATH).
+    "tesseract.path": "./native/linux/tesseract",
+
+    // ===== Tesseract Languages =====
+    // Available languages (traineddata in tessdata/):
+    //   eng   English (default)   fra   French
+    //   deu   German              spa   Spanish
+    //   ita   Italian             por   Portuguese
+    //   rus   Russian             ara   Arabic
+    //   hin   Hindi               chi_sim  Chinese (Simplified)
+    //   chi_tra  Chinese (Traditional)  jpn   Japanese
+    //   kor   Korean              nld   Dutch
+    //   swe   Swedish             pol   Polish
+    //   tur   Turkish             heb   Hebrew
+    //   vie   Vietnamese          tha   Thai
+    //
+    // Multiple languages: "eng+fra" (Latin scripts only;
+    // mixing Latin + CJK is not supported by Tesseract).
+    "tesseract.language": "eng",
+
+    // Page segmentation mode:
+    //   0 = OSD only      1 = Auto + OSD     3 = Auto (no OSD)
+    //   6 = Single block  7 = Single line   11 = Sparse text
+    //  13 = Raw line
+    //
+    // PSM recommendations per language:
+    //   Latin scripts (eng/fra/spa/deu): 1  (Auto + OSD)
+    //   CJK scripts   (chi_sim/chi_tra/jpn):  6  (Single block)
+    "tesseract.psm": 1,
+
+    // ===== PDF Rendering =====
+    // DPI for rendering PDF pages to images before OCR.
+    //   300 = standard OCR quality
+    //   200 = faster, lower accuracy
+    "rendering.dpi": 300,
+
+    // ===== Image Segmentation =====
+    // Tile size (px) for background normalization grid.
+    // Smaller = more detail; larger = faster.
+    "segmenter.tileSize": 64,
+
+    // Background-level percentile per tile (0.0 - 1.0).
+    // 0.95 = 95th percentile.  Increase for sparse text.
+    "segmenter.percentile": 0.95,
+
+    // Inpainting search radius (px) for filling text regions.
+    // Should be ~1.5x the thickest text stroke.
+    "segmenter.inpaintRadius": 3,
+
+    // ===== Pipeline =====
+    // Maximum concurrent Tesseract subprocesses for OCR.
+    // Tesseract is I/O and memory bound.  More than 1 concurrent call can slow
+    // each process 2-3x on typical hardware.  Default: 1 (sequential OCR).
+    // Increase on systems with fast NVMe storage and abundant RAM (>16 GB).
+    "pipeline.ocr.maxThreads": 1,
+
+    // ===== MRC / Pipeline Mode =====
+    // Enable Mixed Raster Content compression.
+    //   true  = segment background (PNG) + foreground (JBIG2) + text layer
+    //   false = original images (JPEG) + text layer only (no MRC compression)
+    // Override via --no-mrc CLI flag.
+    "pipeline.mrc.enabled": true,
+
+    // ===== JBIG2 Compression =====
+    // Flags passed to the jbig2enc binary.
+    //   -p = global symbol dictionary
+    //   -s = refine smearing
+    "jbig2enc.flags": "-p -s",
+
+    // ===== PDF/A =====
+    // Enable PDF/A-2b output (adds XMP metadata, sRGB OutputIntent).
+    // Override via --pdfa CLI flag.
+    "pdf.pdfa.enabled": false,
+
+    // Path to a TrueType font file for embedding into PDF/A output.
+    // Required for strict PDF/A compliance (Standard 14 fonts are not embedded).
+    // When empty, falls back to Standard 14 fonts (non-embedded).
+    "pdf.pdfa.fontPath": "",
+
+    // ===== PDF Assembly =====
+    // Standard 14 font for the invisible OCR text layer.
+    // The Standard 14 are Type1 fonts guaranteed in every PDF viewer
+    // (defined by the PDF spec), so they never need embedding, keeping
+    // the output file small.
+    //
+    //   Family         | Variants
+    //   ---------------+--------------------------
+    //   Times-Roman    | Regular, Bold, Italic, BoldItalic
+    //   Helvetica      | Regular, Bold, Italic, BoldItalic
+    //   Courier        | Regular, Bold, Italic, BoldItalic
+    //   Symbol         | Regular
+    //   ZapfDingbats   | Regular
+    //
+    "pdf.font": "HELVETICA",
+
+    // Minimum font size (pt) to prevent zero-size fonts.
+    "pdf.minFontSize": 1,
+
+    // ===== Output =====
+    // Default output PDF path.
+    // Override via -o / --output CLI flag.
+    "output.file": "output.pdf"
+}
