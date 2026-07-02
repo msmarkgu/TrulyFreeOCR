@@ -11,13 +11,13 @@ import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.SegmentedImage;
 
-/**
- * Tests for ImageSegmenter (pure-Java binarization pipeline).
- *
- * Verifies that segment() returns non-null outputs, preserves dimensions,
- * produces a binary foreground mask (TYPE_BYTE_BINARY), correctly identifies
- * text vs blank pages, and inpaints foreground pixels in the cleaned background.
- */
+    /**
+     * Tests for ImageSegmenter (pure-Java binarization pipeline).
+     *
+     * Verifies that segment() returns non-null outputs, preserves dimensions,
+     * produces a foreground mask, correctly identifies text vs blank pages,
+     * and inpaints foreground pixels in the cleaned background.
+     */
 class ImageSegmenterTest {
 
     static PageExtractor extractor;

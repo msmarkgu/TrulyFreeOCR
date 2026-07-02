@@ -4,6 +4,8 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -11,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.imageio.ImageIO;
@@ -74,6 +77,9 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--threads"}, description = "Threads for segmentation (default: # CPUs). OCR limited to pipeline.ocr.maxThreads (default 1).")
     private Integer threads;
 
+    @Option(names = {"--txt-output"}, description = "Path for extracted text output (default: <output>.txt)")
+    private File txtOutput;
+
     @Override
     public Integer call() {
         Settings settings = Settings.load();
@@ -89,6 +95,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
             // Resolve each parameter: CLI arg > settings.jsonc > hardcoded default
             File resolvedOutput = outputFile != null ? outputFile
                     : new File(settings.getString("output.file", "output.pdf"));
+            File resolvedTxtOutput = txtOutput != null ? txtOutput
+                    : new File(resolvedOutput.getAbsolutePath().replaceAll("\\.pdf$", "") + ".txt");
             String resolvedTessdata = tessdataDir != null ? tessdataDir.getAbsolutePath()
                     : settings.getString("tessdata.dir", "./tessdata");
             String resolvedNative = nativeDir != null ? nativeDir.getAbsolutePath()
@@ -144,7 +152,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             System.out.println("  OCR Workers: " + workerThreads + " thread(s)");
 
             // Run the pipeline
-            runPipeline(inputFile, resolvedOutput, segmenter, ocrEngine, compressor, assembler,
+            runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, segmenter, ocrEngine, compressor, assembler,
                 useMrc, usePdfa, resolvedDpi, workerThreads);
             return 0;
 
@@ -155,7 +163,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
         }
     }
 
-    private void runPipeline(File inputFile, File outputFile,
+    private void runPipeline(File inputFile, File outputFile, File txtOutput,
                              ImageSegmenter segmenter,
                              OCREngine ocrEngine, JBIG2Compressor compressor,
                              PDFAssembler assembler, boolean useMrc, boolean usePdfa,
@@ -173,11 +181,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
             System.out.println("  Processing " + pageCount + " pages...");
 
-            // ── Pass 1: extract, segment, OCR ──
-            //   Rendering + segmentation are sequential (PDFRenderer not thread-safe,
-            //   and segment is thin).  OCR is the bottleneck (~35s/page) and is
-            //   parallelized via an executor — each page's subprocess runs in its
-            //   own thread, bounded by workerThreads.
+            // ── Pass 1: render, prep, OCR ──
+            //   Rendering is sequential on the main thread (PDFRenderer not thread-safe).
+            //   Prep (grayscale, segmentation, ImageIO) + OCR run in the worker pool,
+            //   bounded by workerThreads.  A Semaphore throttles the main thread to
+            //   workerThreads + 2 queued pages to avoid OOM.
             List<PageResult> ocrResults = new ArrayList<>(pageCount);
             int[] imgWidths = new int[pageCount];
             int[] imgHeights = new int[pageCount];
@@ -187,65 +195,60 @@ public class TrulyFreeOCR implements Callable<Integer> {
             try {
                 List<Future<PageResult>> ocrFutures = new ArrayList<>(pageCount);
                 long pipelineStart = System.nanoTime();
-                long firstOcrSubmit = 0;
 
-                int maxLabelWidth = Math.max(
-                    "segment".length(),
-                    ("[ocr-" + workerThreads + "]").length()
-                );
+                int maxLabelWidth = ("[ocr-" + workerThreads + "]").length();
                 String perPageFmt = "    %-" + maxLabelWidth + "s page %d: %4.1fs [+%4.1fs to walltime]%n";
 
+                Semaphore semaphore = new Semaphore(workerThreads + 2);
+
                 for (int i = 0; i < pageCount; i++) {
+                    try {
+                        semaphore.acquire();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Pipeline interrupted", e);
+                    }
 
                     BufferedImage page = renderer.renderImageWithDPI(i, dpi);
 
-                    // Convert to grayscale and save for OCR
-                    BufferedImage gray = toGrayscale(page);
-                    ImageIO.write(gray, "bmp", new File(tempDir, "page-" + i + ".bmp"));
-
-                    imgWidths[i] = gray.getWidth();
-                    imgHeights[i] = gray.getHeight();
-
-                    long segStart = System.nanoTime();
-                    BufferedImage background;
-                    if (useMrc) {
-                        SegmentedImage seg = segmenter.segment(page);
-                        background = seg.getCleanedBackground();
-                        // Save foreground mask for batch JBIG2
-                        ImageIO.write(seg.getForegroundMask(), "bmp",
-                            new File(tempDir, "mask-" + i + ".bmp"));
-                    } else {
-                        background = gray;
-                    }
-
-                    // Save background for assembly (re-read from disk in pass 2)
-                    ImageIO.write(background, "bmp", new File(tempDir, "bg-" + i + ".bmp"));
-                    double segTime = (System.nanoTime() - segStart) / 1e9;
-                    double segCumulative = (System.nanoTime() - pipelineStart) / 1e9;
-                    System.out.printf(perPageFmt, "segment", i + 1, segTime, segCumulative);
-
-                    // Release per-page images
-                    page = null;
-                    gray = null;
-                    background = null;
-
-                    // Submit OCR to thread pool (reads page-i.bmp from disk)
-                    if (i == 0) firstOcrSubmit = System.nanoTime();
                     final int pageIdx = i;
                     ocrFutures.add(ocrExecutor.submit(() -> {
                         long localStart = System.nanoTime();
-                        PageResult r = ocrEngine.ocr(pageIdx, tempDir);
-                        double elapsed = (System.nanoTime() - localStart) / 1e9;
-                        double cumulative = (System.nanoTime() - pipelineStart) / 1e9;
-                        String tn = Thread.currentThread().getName();
-                        System.out.printf(perPageFmt, "[" + tn + "]", pageIdx + 1, elapsed, cumulative);
-                        return r;
+                        try {
+                            // Convert to grayscale and save for OCR
+                            BufferedImage gray = toGrayscale(page);
+                            ImageIO.write(gray, "bmp",
+                                new File(tempDir, "page-" + pageIdx + ".bmp"));
+
+                            imgWidths[pageIdx] = gray.getWidth();
+                            imgHeights[pageIdx] = gray.getHeight();
+
+                            // Segment
+                            BufferedImage background;
+                            if (useMrc) {
+                                SegmentedImage seg = segmenter.segment(page);
+                                background = seg.getCleanedBackground();
+                                ImageIO.write(seg.getForegroundMask(), "bmp",
+                                    new File(tempDir, "mask-" + pageIdx + ".bmp"));
+                            } else {
+                                background = gray;
+                            }
+                            ImageIO.write(background, "bmp",
+                                new File(tempDir, "bg-" + pageIdx + ".bmp"));
+
+                            // OCR
+                            PageResult r = ocrEngine.ocr(pageIdx, tempDir);
+                            double elapsed = (System.nanoTime() - localStart) / 1e9;
+                            double cumulative = (System.nanoTime() - pipelineStart) / 1e9;
+                            String tn = Thread.currentThread().getName();
+                            System.out.printf(perPageFmt, "[" + tn + "]", pageIdx + 1,
+                                elapsed, cumulative);
+                            return r;
+                        } finally {
+                            semaphore.release();
+                        }
                     }));
                 }
-
-                long segDone = System.nanoTime();
-                double segWall = (segDone - pipelineStart) / 1e9;
-                System.out.printf("    Segmentation done in %.1fs (%d pages)%n", segWall, pageCount);
 
                 // Shutdown executor (no more submissions)
                 ocrExecutor.shutdown();
@@ -262,9 +265,14 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     throw new IOException("OCR task failed", e.getCause());
                 }
 
-                long ocrDone = System.nanoTime();
-                double ocrWall = (ocrDone - firstOcrSubmit) / 1e9;
-                System.out.printf("    OCR done: %d pages in %.1fs (%d threads)%n", pageCount, ocrWall, workerThreads);
+                long processingDone = System.nanoTime();
+                double processingWall = (processingDone - pipelineStart) / 1e9;
+                System.out.printf("    Processing done: %d pages in %.1fs (%d threads)%n",
+                    pageCount, processingWall, workerThreads);
+
+                // ── Write extracted text ──
+                System.out.println("  Writing text output...");
+                writeTextOutput(txtOutput, ocrResults);
 
                 // ── JBIG2 batch compression (shared dictionary across all pages) ──
                 JBIG2Compressor.BatchResult jbig2Batch = null;
@@ -320,12 +328,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
                             totalElapsed / 60, totalElapsed % 60);
 
                     long tEnd = System.nanoTime();
-                    double segWall2 = (segDone - pipelineStart) / 1e9;
-                    double ocrWall2 = (ocrDone - segDone) / 1e9;
-                    double asmWall = (tEnd - ocrDone) / 1e9;
+                    double asmWall = (tEnd - processingDone) / 1e9;
                     double totalDouble = (tEnd - pipelineStart) / 1e9;
-                    System.out.printf("Done.  seg %.1fs / ocr %.1fs / asm %.1fs = %.1fs total%n",
-                        segWall2, ocrWall2, asmWall, totalDouble);
+                    System.out.printf("Done.  prep+ocr %.1fs / asm %.1fs = %.1fs total%n",
+                        totalDouble - asmWall, asmWall, totalDouble);
                 }
             } finally {
                 ocrExecutor.shutdownNow();
@@ -334,6 +340,19 @@ public class TrulyFreeOCR implements Callable<Integer> {
         } finally {
             deleteDir(tempDir);
         }
+    }
+
+    private static void writeTextOutput(File file, List<PageResult> results) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        for (PageResult page : results) {
+            sb.append("page ").append(page.getPageNumber()).append("\n");
+            sb.append("======\n");
+            for (var block : page.getTextBlocks()) {
+                sb.append(block.getWord()).append(" ");
+            }
+            sb.append("\n\n");
+        }
+        Files.writeString(file.toPath(), sb.toString(), StandardCharsets.UTF_8);
     }
 
     private static BufferedImage toGrayscale(BufferedImage image) {
