@@ -36,3 +36,9 @@ docs/
 
 # Per-run temp files (page images, OCR output)
 temp/
+
+.opencode/
+
+bin/
+output*.*
+*.class

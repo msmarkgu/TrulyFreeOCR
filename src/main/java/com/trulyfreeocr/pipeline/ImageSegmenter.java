@@ -20,28 +20,16 @@ public class ImageSegmenter {
         this.inpaintRadius = inpaintRadius;
     }
 
-    /**
-     * Orchestrates the full page-segmentation pipeline:
-     *   grayscale -> background normalization -> Otsu binarization -> inpaint background.
-     *
-     * @param image  Input RGB page image (e.g. 300 DPI PDFBox render).
-     * @return       SegmentedImage holding a binary foreground mask and a cleaned background.
-     */
     public SegmentedImage segment(BufferedImage image) {
         int width = image.getWidth();
         int height = image.getHeight();
 
-        // Extract ARGB pixels once, reuse for grayscale + inpainting
         int[] origPixels = new int[width * height];
         image.getRGB(0, 0, width, height, origPixels, 0, width);
 
-        // Step 1: Convert to grayscale (from the cached origPixels)
         int[] gray = toGrayscale(origPixels);
-
-        // Step 2: Background normalization
         int[] bgNormalized = backgroundNormalize(gray, width, height, tileSize);
 
-        // Step 3: Otsu binarization
         int threshold = otsuThreshold(bgNormalized);
         int[] maskPixels = new int[width * height];
         for (int i = 0; i < maskPixels.length; i++) {
@@ -50,7 +38,6 @@ public class ImageSegmenter {
         BufferedImage foregroundMask = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_BINARY);
         foregroundMask.setRGB(0, 0, width, height, maskPixels, 0, width);
 
-        // Step 4: Cleaned background — fill text regions with surrounding color
         BufferedImage cleanedBackground = inpaintBackground(origPixels, maskPixels, width, height, inpaintRadius);
 
         return new SegmentedImage(foregroundMask, cleanedBackground);
@@ -58,13 +45,13 @@ public class ImageSegmenter {
 
     /**
      * Converts a flat ARGB int array to a grayscale int array (0 = black, 255 = white)
-     * using the ITU-R BT.601 luma formula.
+     * using ITU-R BT.601 luma with integer arithmetic.
      *
-     * Magic numbers in luma formula:
-     *   0.299, 0.587, 0.114 — perception-weighted coefficients for R/G/B.
-     *   Human vision is most sensitive to green, least to blue.
-     *   These sum to 1.0, so neutral gray (R=G=B) maps to itself.
-     *   This is the same formula used in JPEG, NTSC/PAL, and most image libraries.
+     * Integer coefficients (scaled by 256):
+     *   0.299 * 256 ≈ 77
+     *   0.587 * 256 ≈ 150
+     *   0.114 * 256 ≈ 29
+     *   Sum: 77 + 150 + 29 = 256 (exact), so (R=G=B) maps to itself.
      *
      * Bit shifts in RGB extraction:
      *   (rgb >> 16) & 0xFF  — extract the red  byte (bits 16-23 of 0xAARRGGBB)
@@ -78,7 +65,7 @@ public class ImageSegmenter {
             int r = (rgb >> 16) & 0xFF;
             int g = (rgb >> 8) & 0xFF;
             int b = rgb & 0xFF;
-            gray[i] = (int) (0.299 * r + 0.587 * g + 0.114 * b);
+            gray[i] = (77 * r + 150 * g + 29 * b) >> 8;
         }
         return gray;
     }
@@ -87,40 +74,32 @@ public class ImageSegmenter {
      * Tile-based background normalization that corrects non-uniform illumination
      * (e.g. shadows, gradients, scanner vignetting).
      *
-     * How it works:
-     *   1. Divide the image into a grid of tiles (default 64x64 px).
-     *   2. In each tile, estimate the "background level" as the 95th percentile
-     *      of pixel intensities. Since text is dark on a light background, the
-     *      bright tail of the histogram represents the page surface (background).
-     *      The 95th percentile is used (instead of max) to be robust to noise.
-     *   3. Build a smooth background surface across the page using bilinear
-     *      interpolation between tile centers.
-     *   4. Each pixel is then stretched: new_value = old_value * 255 / bg_estimate.
-     *      Pixels at or near the background level map to 255 (white); dark text
-     *      pixels stay dark because their value is far below the bg estimate.
+     * Divides the image into a grid of tiles, estimates the local background
+     * level in each tile (95th percentile), builds a smooth background surface
+     * via bilinear interpolation, then stretches each pixel:
+     *   new = old * 255 / bg_estimate.
      *
-     * Magic numbers:
-     *   tileSize = 64 — balances accuracy vs performance. 2^6 allows fast
-     *     integer arithmetic for interpolation (tile centres are at multiples
-     *     of 64).  Smaller = more detail but slower; larger = faster but coarser.
-     *   0.95 — 95th percentile.  Picked empirically: the top 5% of brightness
-     *     values in a tile are assumed to be background, not text or noise.
-     *   255.0 — maximum 8-bit grayscale value (white).
+     * Optimizations versus the original:
+     *   - Integer ceiling division for tile counts.
+     *   - Precomputed per-column tile indices (tx0LUT, tx1LUT, fxLUT) to
+     *     eliminate two div/rem operations per pixel.
+     *   - Precomputed 256×256 normalization lookup table to replace the
+     *     gray * 255 / bg division + clamp with a single array load.
      */
     private int[] backgroundNormalize(int[] gray, int width, int height, int tileSize) {
-        int tilesX = (int) Math.ceil((double) width / tileSize);
-        int tilesY = (int) Math.ceil((double) height / tileSize);
+        int tilesX = (width + tileSize - 1) / tileSize;
+        int tilesY = (height + tileSize - 1) / tileSize;
+        int ts2 = tileSize * tileSize;
 
         // Sample background level per tile (95th percentile = bright, since text is dark)
         int[][] bgLevels = new int[tilesY][tilesX];
         for (int ty = 0; ty < tilesY; ty++) {
+            int startY = ty * tileSize;
+            int endY = Math.min(startY + tileSize, height);
             for (int tx = 0; tx < tilesX; tx++) {
                 int startX = tx * tileSize;
-                int startY = ty * tileSize;
                 int endX = Math.min(startX + tileSize, width);
-                int endY = Math.min(startY + tileSize, height);
 
-                // Build 256-bin histogram for this tile
                 int[] hist = new int[256];
                 for (int y = startY; y < endY; y++) {
                     int rowOffset = y * width;
@@ -129,8 +108,6 @@ public class ImageSegmenter {
                     }
                 }
                 int count = (endX - startX) * (endY - startY);
-
-                // Find the value at the percentile index (forward cumulative sum)
                 int cum = 0;
                 int bgValue = 0;
                 int target = (int) (count * percentile);
@@ -145,29 +122,53 @@ public class ImageSegmenter {
             }
         }
 
+        // Precompute per-column tile indices and fractions
+        int[] tx0LUT = new int[width];
+        int[] tx1LUT = new int[width];
+        int[] fxLUT = new int[width];
+        for (int x = 0; x < width; x++) {
+            int t = x / tileSize;
+            if (t >= tilesX) t = tilesX - 1;
+            tx0LUT[x] = t;
+            tx1LUT[x] = Math.min(t + 1, tilesX - 1);
+            fxLUT[x] = x - t * tileSize;
+        }
+
+        // Precompute 256×256 normalization table: norm[gray][bg] = min(255, gray*255/bg)
+        int[][] norm = new int[256][256];
+        for (int g = 0; g < 256; g++) {
+            int[] row = norm[g];
+            row[0] = g;
+            for (int b = 1; b < 256; b++) {
+                int v = g * 255 / b;
+                row[b] = v < 255 ? v : 255;
+            }
+        }
+
         // Per-pixel background normalization with integer bilinear interpolation
         int[] result = new int[gray.length];
-        int ts2 = tileSize * tileSize;
         for (int y = 0; y < height; y++) {
-            int ty0 = Math.min(y / tileSize, tilesY - 1);
+            int ty0 = y / tileSize;
+            if (ty0 >= tilesY) ty0 = tilesY - 1;
             int ty1 = Math.min(ty0 + 1, tilesY - 1);
-            int fy = y % tileSize;
-            for (int x = 0; x < width; x++) {
-                int tx0 = Math.min(x / tileSize, tilesX - 1);
-                int tx1 = Math.min(tx0 + 1, tilesX - 1);
-                int fx = x % tileSize;
+            int fy = y - ty0 * tileSize;
 
-                int top = bgLevels[ty0][tx0] * (tileSize - fx) + bgLevels[ty0][tx1] * fx;
-                int bot = bgLevels[ty1][tx0] * (tileSize - fx) + bgLevels[ty1][tx1] * fx;
+            int[] bgRow0 = bgLevels[ty0];
+            int[] bgRow1 = bgLevels[ty1];
+
+            int rowOffset = y * width;
+            for (int x = 0; x < width; x++) {
+                int fx = fxLUT[x];
+                int b00 = bgRow0[tx0LUT[x]];
+                int b01 = bgRow0[tx1LUT[x]];
+                int b10 = bgRow1[tx0LUT[x]];
+                int b11 = bgRow1[tx1LUT[x]];
+
+                int top = b00 * (tileSize - fx) + b01 * fx;
+                int bot = b10 * (tileSize - fx) + b11 * fx;
                 int bg = (top * (tileSize - fy) + bot * fy) / ts2;
 
-                int idx = y * width + x;
-                if (bg > 0) {
-                    int normalized = gray[idx] * 255 / bg;
-                    result[idx] = Math.min(255, normalized);
-                } else {
-                    result[idx] = gray[idx];
-                }
+                result[rowOffset + x] = norm[gray[rowOffset + x]][bg];
             }
         }
         return result;
@@ -231,72 +232,93 @@ public class ImageSegmenter {
     }
 
     /**
-     * Simple inpainting: replace foreground (text) pixels with the nearest
-     * background pixel colour found within a search radius.
+     * Inpaints foreground (text) pixels by propagating background pixel colors
+     * inward using a two-pass Manhattan distance transform.
      *
-     * This produces a "cleaned" page where text regions are filled in with
-     * the surrounding page colour — useful as a background layer for PDF
-     * re-assembly (the text will be overlaid as an invisible OCR layer).
+     * This replaces the O(N × R²) brute-force search with O(N) propagation
+     * (4-connected manhattan distance to nearest background pixel).
      *
-     * Algorithm:
-     *   For each pixel that the mask identifies as foreground (black):
-     *     1. Search outward in a square (top-left to bottom-right) within radius.
-     *     2. Pick the first background (white in mask) pixel found.
-     *     3. Copy that pixel's colour to the result.
-     *   Background pixels are copied unchanged.
+     * Pass 1 (top-left → bottom-right): propagate colors from top and left neighbors.
+     * Pass 2 (bottom-right → top-left): propagate colors from bottom and right neighbors.
      *
-     * This is a crude "nearest neighbour" inpaint — a real implementation would
-     * use a proper diffusion or patch-match algorithm, but this is sufficient
-     * for the page-background use case.
-     *
-     * Magic numbers:
-     *   radius — search window size (passed in as parameter; typically 3).
-     *     3 is used because typical text stroke widths at 300 DPI are 2-4 px.
-     *     Larger values handle thicker strokes but are slower.
-     *   0xFFFFFF — bitmask to extract only the RGB channels, discarding alpha.
-     *     setRGB expects full ARGB, so foreground is 0xFF000000 (black w/ alpha=FF)
-     *     and background is 0xFFFFFFFF (white w/ alpha=FF).
-     *   Bit shifts for colour reconstruction:
-     *     (bestR << 16) | (bestG << 8) | bestB — packs R, G, B into 0x00RRGGBB.
-     *     Alpha is also needed: | 0xFF000000 for full opacity.
-     *     (nrgb >> 16) & 0xFF, (nrgb >> 8) & 0xFF, nrgb & 0xFF — extract
-     *     individual 8-bit colour channels from a 32-bit ARGB int.
+     * Background pixels are copied unchanged.
      */
     private BufferedImage inpaintBackground(int[] origPixels, int[] maskPixels, int width, int height, int radius) {
-        int[] resultPixels = new int[width * height];
+        int len = width * height;
+        int[] dist = new int[len];
+        int[] fillColor = new int[len];
 
+        // Initialize: background (white mask) = distance 0, foreground (black mask) = INF
+        for (int i = 0; i < len; i++) {
+            if ((maskPixels[i] & 0xFFFFFF) != 0) {
+                dist[i] = 0;
+                fillColor[i] = origPixels[i];
+            } else {
+                dist[i] = Integer.MAX_VALUE / 2;
+            }
+        }
+
+        // Pass 1: top-left → bottom-right
         for (int y = 0; y < height; y++) {
+            int row = y * width;
             for (int x = 0; x < width; x++) {
-                int idx = y * width + x;
-                boolean isForeground = (maskPixels[idx] & 0xFFFFFF) == 0;
-
-                if (!isForeground) {
-                    resultPixels[idx] = origPixels[idx];
-                } else {
-                    // Find nearest background pixel within radius
-                    int bestR = 0, bestG = 0, bestB = 0;
-                    int found = 0;
-                    for (int dy = -radius; dy <= radius && found == 0; dy++) {
-                        for (int dx = -radius; dx <= radius && found == 0; dx++) {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-                            int nmask = maskPixels[ny * width + nx];
-                            if ((nmask & 0xFFFFFF) != 0) {
-                                int nrgb = origPixels[ny * width + nx];
-                                bestR = (nrgb >> 16) & 0xFF;
-                                bestG = (nrgb >> 8) & 0xFF;
-                                bestB = nrgb & 0xFF;
-                                found++;
-                            }
-                        }
-                    }
-                    if (found > 0) {
-                        resultPixels[idx] = 0xFF000000 | (bestR << 16) | (bestG << 8) | bestB;
-                    } else {
-                        resultPixels[idx] = origPixels[idx];
+                int idx = row + x;
+                if (dist[idx] == 0) continue;
+                // Check top neighbor
+                if (y > 0) {
+                    int n = idx - width;
+                    int nd = dist[n] + 1;
+                    if (nd < dist[idx]) {
+                        dist[idx] = nd;
+                        fillColor[idx] = fillColor[n];
                     }
                 }
+                // Check left neighbor
+                if (x > 0) {
+                    int n = idx - 1;
+                    int nd = dist[n] + 1;
+                    if (nd < dist[idx]) {
+                        dist[idx] = nd;
+                        fillColor[idx] = fillColor[n];
+                    }
+                }
+            }
+        }
+
+        // Pass 2: bottom-right → top-left
+        for (int y = height - 1; y >= 0; y--) {
+            int row = y * width;
+            for (int x = width - 1; x >= 0; x--) {
+                int idx = row + x;
+                if (dist[idx] == 0) continue;
+                // Check bottom neighbor
+                if (y < height - 1) {
+                    int n = idx + width;
+                    int nd = dist[n] + 1;
+                    if (nd < dist[idx]) {
+                        dist[idx] = nd;
+                        fillColor[idx] = fillColor[n];
+                    }
+                }
+                // Check right neighbor
+                if (x < width - 1) {
+                    int n = idx + 1;
+                    int nd = dist[n] + 1;
+                    if (nd < dist[idx]) {
+                        dist[idx] = nd;
+                        fillColor[idx] = fillColor[n];
+                    }
+                }
+            }
+        }
+
+        // Build result: fillColor for foreground, origPixels for background
+        int[] resultPixels = new int[len];
+        for (int i = 0; i < len; i++) {
+            if (dist[i] == 0) {
+                resultPixels[i] = origPixels[i];
+            } else {
+                resultPixels[i] = fillColor[i];
             }
         }
 
