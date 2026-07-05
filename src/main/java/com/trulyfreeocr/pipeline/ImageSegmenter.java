@@ -123,15 +123,20 @@ public class ImageSegmenter {
         }
 
         // Precompute per-column tile indices and fractions
+        // Shift anchor points by halfTile so bgLevels values are centred in tiles.
+        int halfTile = tileSize / 2;
         int[] tx0LUT = new int[width];
         int[] tx1LUT = new int[width];
         int[] fxLUT = new int[width];
         for (int x = 0; x < width; x++) {
-            int t = x / tileSize;
+            int sx = x + halfTile;
+            int t = sx / tileSize;
+            if (t < 0) t = 0;
             if (t >= tilesX) t = tilesX - 1;
             tx0LUT[x] = t;
             tx1LUT[x] = Math.min(t + 1, tilesX - 1);
-            fxLUT[x] = x - t * tileSize;
+            int f = sx - t * tileSize;
+            fxLUT[x] = f < tileSize ? f : tileSize - 1;
         }
 
         // Precompute 256×256 normalization table: norm[gray][bg] = min(255, gray*255/bg)
@@ -146,12 +151,16 @@ public class ImageSegmenter {
         }
 
         // Per-pixel background normalization with integer bilinear interpolation
+        // Tile anchors are shifted by halfTile to centre bgLevels within each tile.
         int[] result = new int[gray.length];
         for (int y = 0; y < height; y++) {
-            int ty0 = y / tileSize;
+            int sy = y + halfTile;
+            int ty0 = sy / tileSize;
+            if (ty0 < 0) ty0 = 0;
             if (ty0 >= tilesY) ty0 = tilesY - 1;
             int ty1 = Math.min(ty0 + 1, tilesY - 1);
-            int fy = y - ty0 * tileSize;
+            int fy = sy - ty0 * tileSize;
+            if (fy >= tileSize) fy = tileSize - 1;
 
             int[] bgRow0 = bgLevels[ty0];
             int[] bgRow1 = bgLevels[ty1];
@@ -204,7 +213,7 @@ public class ImageSegmenter {
         int total = pixels.length;
         double sum = 0;
         for (int i = 0; i < 256; i++) {
-            sum += i * histogram[i];
+            sum += (double) i * histogram[i];
         }
 
         double sumB = 0;
@@ -218,7 +227,7 @@ public class ImageSegmenter {
             int wF = total - wB;
             if (wF == 0) break;
 
-            sumB += i * histogram[i];
+            sumB += (double) i * histogram[i];
             double meanB = sumB / wB;
             double meanF = (sum - sumB) / wF;
             double variance = (double) wB * wF * (meanB - meanF) * (meanB - meanF);
@@ -249,10 +258,11 @@ public class ImageSegmenter {
         int[] fillColor = new int[len];
 
         // Initialize: background (white mask) = distance 0, foreground (black mask) = INF
+        // Always seed fillColor from origPixels so all-foreground images degrade gracefully.
         for (int i = 0; i < len; i++) {
+            fillColor[i] = origPixels[i];
             if ((maskPixels[i] & 0xFFFFFF) != 0) {
                 dist[i] = 0;
-                fillColor[i] = origPixels[i];
             } else {
                 dist[i] = Integer.MAX_VALUE / 2;
             }
