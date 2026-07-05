@@ -1,6 +1,7 @@
 # TrulyFreeOCR
 
-Commercially-safe OCR pipeline to produce fully searchable PDFs.
+Business-friendly open source OCR pipeline to produce fully searchable PDFs.
+All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 **Input**: Any PDF (searchable, non-searchable, or partially searchable)<br>
 **Output**: Fully searchable, MRC-compressed PDF
@@ -21,25 +22,26 @@ Commercially-safe OCR pipeline to produce fully searchable PDFs.
   All parameters (DPI, language, PSM, MRC on/off) are scriptable. The fat JAR
   has zero Java-classpath fuss — one file to copy, one command to run.
 
-- **Teams scanning at scale** — MRC compression typically reduces PDF size 5–10×
-  versus straight JPEG while keeping text razor-sharp via the JBIG2 foreground
-  mask. Supports 20 languages including English, French, German, Spanish,
-  Italian, Portuguese, Russian, Arabic, Hindi, Chinese, Japanese, Korean, and more.
+- **High-volume document scanning** — MRC compression reduces PDF size ~30–50%
+  versus JPEG-only while keeping text razor-sharp via the JBIG2 foreground
+  mask (larger gains with JBIG2 available). Ships with 6 trained language models (English, French, German, Spanish,
+  Chinese Simplified, Chinese Traditional, Japanese). Add more by downloading
+  Tesseract traineddata files.
 
 - **Open-source contributors / integrators** — Pure-Java segmentation (no
   Leptonica native dependency). Clean pipeline API with PageExtractor →
-  ImageSegmenter → OCREngine → PDFAssembler. Each component is independently
-  testable and replaceable.
+  ImageSegmenter → OCREngine → PDFAssembler. Each component has focused unit
+  tests and a well-defined contract.
 
 ---
 
 ## Why TrulyFreeOCR
 
-A survey of 19 open-source OCR projects (see [`docs/similar-projects-comparison.md`](docs/similar-projects-comparison.md)) found none that combine all five requirements for production document processing:
+A survey of 19 open-source OCR projects (see [`similar-projects.md`](similar-projects.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
 - **Self-contained** — single fat JAR + `bootstrap.sh`; no Python, no system deps
-- **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background
+- **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project)
 - **Searchable PDF output** — invisible text layer + optional PDF/A-2b
 - **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine
 
@@ -52,65 +54,84 @@ Where other tools fall short:
 - **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
 - **[surya](https://github.com/VikParuchuri/surya) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
 
-TrulyFreeOCR fills the gap: deploy anywhere, no cloud, no GPU, no license worries — just a JAR and a PDF.
+TrulyFreeOCR fills the gap: no license worries, no data going to cloud, no need gpu — you only need to run the fat jar, input a PDF, get a searchable PDF out.
 
 ---
 
 ## Getting Started
 
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/msmarkgu/TrulyFreeOCR.git
+   cd TrulyFreeOCR
+   ```
+
+2. Run the bootstrap script:
+   ```bash
+   ./bootstrap.sh
+   ```
+   This will install:
+   - OpenJDK 21 LTS
+   - Tesseract OCR engine
+   - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn)
+   - jbig2enc for JBIG2 compression
+   - All required native libraries
+
+3. To force re-download all dependencies:
+   ```bash
+   ./bootstrap.sh --force
+   ```
+
+### Verification
+
+After running `bootstrap.sh`, verify all dependencies were installed:
+
 ```bash
-git clone https://github.com/msmarkgu/TrulyFreeOCR.git
-cd TrulyFreeOCR
+# Check JDK
+./jdk/linux/bin/java -version
 
-# Install dependencies (JDK, Tesseract, tessdata, jbig2enc, native libs or executables)
-./bootstrap.sh
+# Check Tesseract
+./native/linux/tesseract --version
 
-# Build the fat JAR (contains all Java dependencies)
-./gradlew build
+# Check jbig2enc
+ls -l ./native/linux/jbig2enc
 
-# Run all tests (optional)
-./gradlew test
+# Check language data
+ls ./tessdata/*.traineddata
 ```
 
-### Basic Usage
+If these files and binaries exist, the installation is complete.
 
+### Usage
+
+Basic usage:
 ```bash
-# Minimal: process a PDF with default settings
-java -jar build/libs/trulyfreeocr.jar input.pdf
-
-# Specify output path
 java -jar build/libs/trulyfreeocr.jar input.pdf -o output.pdf
+```
 
-# Use a different language (fra, spa, deu, chi_sim, chi_tra, jpn)
-java -jar build/libs/trulyfreeocr.jar input.pdf --language fra
+Common options:
+```bash
+# Set DPI (default: 300)
+java -jar build/libs/trulyfreeocr.jar input.pdf --dpi 300
 
-# Adjust Tesseract page segmentation mode
-java -jar build/libs/trulyfreeocr.jar input.pdf --psm 6
+# Set language (default: eng)
+java -jar build/libs/trulyfreeocr.jar input.pdf --language spa
 
-# Lower DPI for faster processing (less accurate)
-java -jar build/libs/trulyfreeocr.jar input.pdf --dpi 200
-
-# Disable MRC compression (faster assembly, larger files)
+# Disable MRC compression
 java -jar build/libs/trulyfreeocr.jar input.pdf --no-mrc
 
-# Enable PDF/A-2b output
-java -jar build/libs/trulyfreeocr.jar input.pdf --pdfa
-
-# Control segmentation threads (default: # of CPU cores). OCR uses min(threads, 4).
-java -jar build/libs/trulyfreeocr.jar input.pdf --threads 2
-
-# Custom native/tessdata directories
-java -jar build/libs/trulyfreeocr.jar input.pdf \
-    --native-dir ./custom-native --tessdata-dir ./custom-tessdata
-
-# Load settings from a custom file (overrides settings.jsonc)
-java -jar build/libs/trulyfreeocr.jar input.pdf --settings /path/to/custom.jsonc
-
-# Using the project-local JDK wrapper
-TFOCR_JAVA_HOME=jdk/linux ./gradlew run --args="input.pdf -o output.pdf"
+# Using the convenience wrapper (auto-detects JDK, builds if needed)
+./run.sh input.pdf -o output.pdf
 ```
 
-CLI flags override `settings.jsonc` values, which override hardcoded defaults. Run with `--help` for all options.
+For more options, run:
+```bash
+java -jar build/libs/trulyfreeocr.jar --help
+```
+
+CLI flags override `settings.jsonc` values, which override hardcoded defaults.
 
 ---
 
@@ -122,18 +143,17 @@ Input PDF
     v
 PageExtractor  — PDFBox PDFRenderer (configurable DPI) → per-page BufferedImage
     |
-    +---------+----------+
-    |         |          |
-    v         v          v
-ImageSegmenter  |   OCREngine          (parallel across pages, configurable threads)
-    |           |      |
-    |           | Tesseract CLI
-    |           | word-level bboxes with TSV output
-    +----+------+
-         |
-         v
-PDFAssembler — Background layer + CCITT G4 foreground mask stencil
+    v (main thread, sequential — PDFRenderer not thread-safe)
++----------------------------+
+| Worker pool (N threads)    |
+|  per-page: toGrayscale →   |
+|  ImageSegmenter → OCREngine|   (parallel across pages)
++----------------------------+
+    |
+    v
+PDFAssembler — Background layer + CCITT G4 / JBIG2 foreground mask stencil
     |            + invisible OCR text (rendering mode 3)
+    |            + metadata / bookmarks / annotations (via MetadataPreserver)
     v
 Output PDF (searchable, compressed; optionally PDF/A-2b)
 ```
@@ -160,7 +180,7 @@ When rendered, layers are stacked: background → foreground stencil (punches th
 | Mixed page (text + photo) | Baseline | Similar savings — photo stays in JPEG, text pulled into mask | Photo unaffected; text layer shrinks |
 | Full-page photo | Baseline | Slightly larger (mask adds overhead with no text to compress) | MRC detects no foreground text; overhead is negligible |
 
-For a typical text document, MRC output is **5–10× smaller** than JPEG-only while keeping text edges perfectly sharp.
+For a typical text document, MRC output is **30–50% smaller** than JPEG-only while keeping text edges perfectly sharp. Larger gains are expected when JBIG2 is available.
 
 Disable MRC with `--no-mrc` to skip segmentation and output raw JPEG backgrounds with text layer only (faster assembly, larger files).
 
@@ -188,8 +208,9 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 | `pdf.pdfa.enabled` | `false` | Enable PDF/A-2b output (adds XMP metadata, sRGB OutputIntent) |
 | `pdf.pdfa.fontPath` | `""` | Path to a TrueType font for embedding in PDF/A; empty = Standard 14 (non-embedded) |
 | `output.file` | `output.pdf` | Default output file path |
+| `jbig2enc.flags` | `-p -s` | Flags passed to the jbig2enc binary |
 
-CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--settings` (path to a custom settings file).
+CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--txt-output`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--settings` (path to a custom settings file).
 
 ---
 
@@ -199,8 +220,8 @@ CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, 
 |---|---|---|
 | **Word Error Rate** | 0.9% – 3.2% | Well within the 5% target for standard documents |
 | **Character Error Rate** | 0.2% – 1.2% | Sub-character accuracy on clean scans |
-| **Word Recall** | 98.7% | Almost all ground-truth words detected |
-| **Word Precision** | 98.7% | Very few false positives |
+| **Word Recall** | ~95%–99% | Almost all ground-truth words detected |
+| **Word Precision** | ~95%–99% | Very few false positives |
 | **Mean Confidence** | 89.5 – 94.7 | Tesseract per-word confidence score |
 
 Results measured on a 10-page public-domain prose corpus at 300 DPI, English language.
@@ -212,13 +233,9 @@ for the full methodology, per-page breakdown, and parameter sensitivity plans.
 
 ## Testing
 
-Tests use generated sample PDFs in `tests/test-files/`:
-- `blank.pdf` — single blank US Letter page
-- `simple-text.pdf` — one page with lorem ipsum text
-- `multi-page.pdf` — three-page document with distinct content per page
-- `two-column.pdf` — two-column layout
-- `with-annotations.pdf` — bookmarks, links, and comments
-- `noisy-scan.pdf` — simulated scanner noise and skew
+Tests use sample PDFs in `tests/test-files/`:
+- `generated/` — synthetic PDFs produced by `TestPdfGenerator.java`
+- `real-world/` — downloaded publicly-available PDFs (research papers, government publications, business reports)
 
 Regenerate test PDFs with:
 ```bash
@@ -238,7 +255,7 @@ WER/CER targets, parameter sensitivity sweeps, and performance baselines.
 | **ImageSegmenter** | Pure-Java page segmentation: grayscale conversion → background normalization → Otsu binarization → inpainting. No Leptonica dependency. |
 | **OCREngine** | Delegates to Tesseract CLI (not JNA/Tess4J) via subprocess with TSV output. Avoids native-library version mismatches. |
 | **JBIG2Compressor** | Compresses binary foreground masks via jbig2enc (`-p -s`). Falls back to CCITT Group 4 fax encoding via PDFBox when jbig2enc is unavailable. |
-| **PDFAssembler** | Re-assembles the output PDF: background (JPEG or lossless PNG) + CCITT G4 foreground stencil + invisible OCR text (rendering mode 3, Standard 14 fonts). |
+| **PDFAssembler** | Re-assembles the output PDF: background (JPEG with MRC, lossless PNG without) + CCITT G4 / JBIG2 foreground stencil + invisible OCR text (rendering mode 3, Standard 14 fonts). Copies bookmarks, annotations, and XMP metadata via MetadataPreserver. |
 | **MetadataPreserver** | Copies document info, outlines (bookmarks), per-page annotations, and XMP metadata from source to output. |
 
 ---
@@ -281,9 +298,9 @@ The `bootstrap.sh` script handles setting them up from scratch.
 | Dependency | Project Location | License | Project |
 |---|---|---|---|
 | OpenJDK 21 LTS | `jdk/` | GPL 2.0 + Classpath Exception | https://adoptium.net |
-| Tesseract OCR | `native/$OS/tesseract` → `tesseract.bin` + `native/$OS/lib/libtesseract.so.5` | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
+| Tesseract OCR | `native/$OS/tesseract` (system install symlink) + `native/$OS/lib/libtesseract.so.5` | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
 | Leptonica | `native/$OS/lib/liblept.so.5` | BSD 2-Clause | https://github.com/DanBloomberg/leptonica |
-| jbig2enc | `native/$OS/jbig2enc` → `jbig2enc.bin` + `native/$OS/lib/libjbig2enc.so.0` | Apache 2.0 | https://github.com/agl/jbig2enc |
+| jbig2enc | `native/$OS/jbig2enc` (precompiled binary) | Apache 2.0 | https://github.com/agl/jbig2enc |
 | Tesseract language data | `tessdata/*.traineddata` (eng, fra, spa, deu, chi_sim, chi_tra, jpn) | Apache 2.0 | https://github.com/tesseract-ocr/tessdata |
 
 Binary wrappers in `native/$OS/` set `LD_LIBRARY_PATH` to `native/$OS/lib/` so
@@ -308,11 +325,9 @@ the project-local shared libraries are used instead of system-wide ones.
 | 10 | Integration tests | Done |
 | 11 | Concurrent page processing | Done |
 | 12 | PDF/A-2b output | Done |
-| 13 | 20 language bundles | Done |
+| 13 | 6 language bundles | Done |
 
 </details>
-
----
 
 ## License
 
