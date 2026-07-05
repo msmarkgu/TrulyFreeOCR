@@ -31,7 +31,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_blankPage_returnsNonNull() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/blank.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/blank.pdf"));
         SegmentedImage result = segmenter.segment(pages.get(0));
         assertNotNull(result);
         assertNotNull(result.getForegroundMask());
@@ -40,7 +40,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_preservesDimensions() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
         BufferedImage page = pages.get(0);
         SegmentedImage result = segmenter.segment(page);
         assertEquals(page.getWidth(), result.getForegroundMask().getWidth());
@@ -51,7 +51,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_foregroundMaskIsBinary() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
         SegmentedImage result = segmenter.segment(pages.get(0));
         BufferedImage mask = result.getForegroundMask();
         assertEquals(BufferedImage.TYPE_BYTE_BINARY, mask.getType());
@@ -59,7 +59,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_blankPage_hasLittleForeground() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/blank.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/blank.pdf"));
         SegmentedImage result = segmenter.segment(pages.get(0));
         BufferedImage mask = result.getForegroundMask();
         int width = mask.getWidth();
@@ -80,7 +80,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_simpleText_hasForegroundPixels() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
         SegmentedImage result = segmenter.segment(pages.get(0));
         BufferedImage mask = result.getForegroundMask();
         int width = mask.getWidth();
@@ -101,7 +101,7 @@ class ImageSegmenterTest {
 
     @Test
     void segment_cleanedBackground_reducesTextNoise() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
         BufferedImage page = pages.get(0);
         SegmentedImage result = segmenter.segment(page);
         BufferedImage cleaned = result.getCleanedBackground();

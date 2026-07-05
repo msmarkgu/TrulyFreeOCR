@@ -80,7 +80,7 @@ class PDFAssemblerTest {
 
     @Test
     void assemble_simpleText_createsSearchablePdf() throws IOException {
-        File input = new File("tests/test-files/simple-text.pdf");
+        File input = new File("tests/test-files/generated/simple-text.pdf");
         var pages = extractor.extractPages(input);
         assertFalse(pages.isEmpty());
 
@@ -105,7 +105,7 @@ class PDFAssemblerTest {
 
     @Test
     void assemble_multiPage_preservesPageCount() throws IOException {
-        File input = new File("tests/test-files/multi-page.pdf");
+        File input = new File("tests/test-files/generated/multi-page.pdf");
         var pages = extractor.extractPages(input);
         assertEquals(3, pages.size());
 
@@ -122,7 +122,7 @@ class PDFAssemblerTest {
 
     @Test
     void assemble_multiPage_eachPageHasText() throws IOException {
-        File input = new File("tests/test-files/multi-page.pdf");
+        File input = new File("tests/test-files/generated/multi-page.pdf");
         var pages = extractor.extractPages(input);
         var backgrounds = pages.stream()
                 .map(segmenter::segment)
@@ -144,7 +144,7 @@ class PDFAssemblerTest {
 
     @Test
     void assemble_blankPage_createsPdfWithCorrectDimensions() throws IOException {
-        File input = new File("tests/test-files/blank.pdf");
+        File input = new File("tests/test-files/generated/blank.pdf");
         var pages = extractor.extractPages(input);
         var backgrounds = pages.stream()
                 .map(segmenter::segment)
@@ -162,7 +162,7 @@ class PDFAssemblerTest {
 
     @Test
     void assemble_withForegroundMask_usesCcittStencil() throws IOException {
-        File input = new File("tests/test-files/simple-text.pdf");
+        File input = new File("tests/test-files/generated/simple-text.pdf");
         var pages = extractor.extractPages(input);
         var segmented = pages.stream().map(segmenter::segment).toList();
         var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
