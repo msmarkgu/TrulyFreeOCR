@@ -19,10 +19,17 @@ esac
 echo "Detected: $OS / $ARCH"
 
 # ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
+# Add --force flag to force re-download all dependencies
+FORCE_DOWNLOAD=false
+if [ "$#" -gt 0 ] && [ "$1" = "--force" ]; then
+  FORCE_DOWNLOAD=true
+  echo "Forcing re-download of all dependencies..."
+fi
+
 JDK_DIR="$SCRIPT_DIR/jdk/$OS"
 mkdir -p "$JDK_DIR"
 
-if [ -z "$(ls -A "$JDK_DIR" 2>/dev/null)" ]; then
+if [ "$FORCE_DOWNLOAD" = true ] || [ -z "$(ls -A "$JDK_DIR" 2>/dev/null)" ]; then
   echo "Downloading OpenJDK 21 LTS for $OS/$ARCH..."
 
   # Adoptium API
@@ -39,6 +46,12 @@ if [ -z "$(ls -A "$JDK_DIR" 2>/dev/null)" ]; then
   echo "OpenJDK 21 downloaded to $JDK_DIR"
 else
   echo "OpenJDK already present in $JDK_DIR"
+fi
+
+# Skip JDK download if already present
+if [ -d "$JDK_DIR/jdk-21*" ]; then
+  echo "OpenJDK 21 already present in $JDK_DIR"
+  JDK_DIR="$JDK_DIR/jdk-21*"
 fi
 
 # Find actual JDK home
@@ -65,9 +78,9 @@ export TFOCR_JAVA_HOME="$JAVA_HOME_PATH"
 TESSDATA_DIR="$SCRIPT_DIR/tessdata"
 mkdir -p "$TESSDATA_DIR"
 
-LANGUAGES="eng fra deu spa ita por rus ara hin chi_sim chi_tra jpn kor nld swe pol tur heb vie tha"
+LANGUAGES="eng fra deu spa chi_sim chi_tra jpn"
 for lang in $LANGUAGES; do
-  if [ ! -f "$TESSDATA_DIR/${lang}.traineddata" ]; then
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$TESSDATA_DIR/${lang}.traineddata" ]; then
     echo "Downloading ${lang}.traineddata..."
     curl -fsSL -o "$TESSDATA_DIR/${lang}.traineddata" \
       "https://github.com/tesseract-ocr/tessdata/raw/main/${lang}.traineddata"
@@ -122,46 +135,22 @@ case "$OS" in
 esac
 
 # ── 4. Download jbig2enc ────────────────────────────────────────────────────
-if [ ! -x "$NATIVE_DIR/jbig2enc" ] && [ "$OS" != "win" ]; then
+if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$NATIVE_DIR/jbig2enc" ] && [ "$OS" != "win" ]; then
   echo "Downloading jbig2enc for $OS/$ARCH..."
   case "$OS" in
     linux)
-      # Build from source (simplest portable approach)
-      if command -v cmake &>/dev/null && command -v g++ &>/dev/null; then
-        BUILD_DIR=$(mktemp -d)
-        (
-          cd "$BUILD_DIR"
-          git clone --depth=1 https://github.com/agl/jbig2enc.git
-          cd jbig2enc
-          ./configure && make
-          cp jbig2enc "$NATIVE_DIR/"
-        )
-        rm -rf "$BUILD_DIR"
-        echo "jbig2enc built and copied to $NATIVE_DIR"
-      else
-        echo "WARNING: cmake/g++ not found. Skipping jbig2enc build."
-        echo "Install build tools and run again, or download jbig2enc manually."
-      fi
+      # Download precompiled binary for Linux
+      JBIG2_URL="https://github.com/agl/jbig2enc/releases/download/0.32/jbig2enc-0.32-linux-x86_64"
+      curl -fsSL -o "$NATIVE_DIR/jbig2enc" "$JBIG2_URL"
+      chmod +x "$NATIVE_DIR/jbig2enc"
+      echo "jbig2enc downloaded to $NATIVE_DIR"
       ;;
     mac)
-      if command -v brew &>/dev/null; then
-        brew install agl-jbig2enc 2>/dev/null || brew install jbig2enc 2>/dev/null || {
-          echo "jbig2enc not available via brew. Building from source..."
-          BUILD_DIR=$(mktemp -d)
-          (
-            cd "$BUILD_DIR"
-            git clone --depth=1 https://github.com/agl/jbig2enc.git
-            cd jbig2enc
-            ./configure && make
-            cp jbig2enc "$NATIVE_DIR/"
-          )
-          rm -rf "$BUILD_DIR"
-        }
-        JBIG_BIN=$(which jbig2enc 2>/dev/null || echo "")
-        if [ -n "$JBIG_BIN" ]; then
-          cp "$JBIG_BIN" "$NATIVE_DIR/"
-        fi
-      fi
+      # Download precompiled binary for macOS
+      JBIG2_URL="https://github.com/agl/jbig2enc/releases/download/0.32/jbig2enc-0.32-macos-x86_64"
+      curl -fsSL -o "$NATIVE_DIR/jbig2enc" "$JBIG2_URL"
+      chmod +x "$NATIVE_DIR/jbig2enc"
+      echo "jbig2enc downloaded to $NATIVE_DIR"
       ;;
   esac
 fi
