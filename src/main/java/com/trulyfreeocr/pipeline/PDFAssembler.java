@@ -149,11 +149,17 @@ public class PDFAssembler {
 
         try (PDPageContentStream cs = new PDPageContentStream(output, outPage)) {
             // Layer 1: background image
+            // When a foreground mask is present, the background can be lossy JPEG
+            // because the foreground stencil preserves text pixels at full sharpness.
+            // When no mask exists, the background is the only visual layer, so JPEG
+            // at a moderate quality is used directly.
             PDImageXObject bgXObject;
             if (foregroundMask == null) {
                 bgXObject = JPEGFactory.createFromImage(output, background, 0.85f);
             } else {
-                bgXObject = LosslessFactory.createFromImage(output, background);
+                // Background with foreground mask can use lower quality JPEG because
+                // text pixels come from the sharp binary stencil layer, not the background.
+                bgXObject = JPEGFactory.createFromImage(output, background, 0.70f);
             }
             cs.drawImage(bgXObject, 0, 0, pageW, pageH);
 
@@ -259,8 +265,9 @@ public class PDFAssembler {
         output.addPage(outPage);
 
         try (PDPageContentStream cs = new PDPageContentStream(output, outPage)) {
-            // Layer 1: background image
-            PDImageXObject bgXObject = LosslessFactory.createFromImage(output, background);
+            // Layer 1: background image — lower quality JPEG is safe because the JBIG2
+            // foreground mask preserves text pixels at full sharpness.
+            PDImageXObject bgXObject = JPEGFactory.createFromImage(output, background, 0.70f);
             cs.drawImage(bgXObject, 0, 0, pageW, pageH);
 
             // Layer 2: JBIG2 foreground mask — combine globals into page stream
