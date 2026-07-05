@@ -15,17 +15,19 @@
     "tesseract.path": "./native/linux/tesseract",
 
     // ===== Tesseract Languages =====
-    // Available languages (traineddata in tessdata/):
-    //   eng   English (default)   fra   French
-    //   deu   German              spa   Spanish
-    //   ita   Italian             por   Portuguese
-    //   rus   Russian             ara   Arabic
-    //   hin   Hindi               chi_sim  Chinese (Simplified)
-    //   chi_tra  Chinese (Traditional)  jpn   Japanese
-    //   kor   Korean              nld   Dutch
-    //   swe   Swedish             pol   Polish
-    //   tur   Turkish             heb   Hebrew
-    //   vie   Vietnamese          tha   Thai
+    // Available languages (traineddata in tessdata/). Only those marked
+    // with ★ ship by default — download additional .traineddata files from
+    // https://github.com/tesseract-ocr/tessdata to add more.
+    //   ★ eng   English (default)      ★ fra   French
+    //   ★ deu   German                  ★ spa   Spanish
+    //     ita   Italian                   por   Portuguese
+    //     rus   Russian                   ara   Arabic
+    //     hin   Hindi                   ★ chi_sim  Chinese (Simplified)
+    //   ★ chi_tra  Chinese (Traditional)  ★ jpn   Japanese
+    //     kor   Korean                    nld   Dutch
+    //     swe   Swedish                   pol   Polish
+    //     tur   Turkish                   heb   Hebrew
+    //     vie   Vietnamese                tha   Thai
     //
     // Multiple languages: "eng+fra" (Latin scripts only;
     // mixing Latin + CJK is not supported by Tesseract).
