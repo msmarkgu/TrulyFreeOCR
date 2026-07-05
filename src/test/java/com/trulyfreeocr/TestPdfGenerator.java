@@ -43,7 +43,7 @@ public class TestPdfGenerator implements Callable<Integer> {
     private static final int MARGIN = 50;
     private static final int LINE_HEIGHT = 22;
     private static final String FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    private static final Path OUT_DIR = Path.of("tests", "test-files");
+    private static final Path OUT_DIR = Path.of("tests", "test-files", "generated");
 
     @Option(names = "--force", description = "Regenerate existing files")
     private boolean force;
