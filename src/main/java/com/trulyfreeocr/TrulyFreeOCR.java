@@ -22,6 +22,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.text.PDFTextStripper;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -30,6 +31,7 @@ import picocli.CommandLine.Parameters;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.SegmentedImage;
+import com.trulyfreeocr.model.TextBlock;
 import com.trulyfreeocr.pipeline.ImageSegmenter;
 import com.trulyfreeocr.pipeline.JBIG2Compressor;
 import com.trulyfreeocr.pipeline.OCREngine;
@@ -74,7 +76,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--pdfa"}, description = "Enable PDF/A-2b output (XMP metadata, sRGB OutputIntent)")
     private Boolean pdfa;
 
-    @Option(names = {"--threads"}, description = "Threads for segmentation (default: # CPUs). OCR limited to pipeline.ocr.maxThreads (default 1).")
+    @Option(names = {"--threads"}, description = "Worker threads for prep + OCR. Default: pipeline.ocr.maxThreads (1).")
     private Integer threads;
 
     @Option(names = {"--txt-output"}, description = "Path for extracted text output (default: <output>.txt)")
@@ -89,7 +91,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
         }
 
         System.out.println("TrulyFreeOCR v1.0.0");
-        System.out.println("  Input:  " + inputFile);
+        System.out.println("  Input:  " + inputFile + " (" + formatSize(inputFile.length()) + ")");
 
         try {
             // Resolve each parameter: CLI arg > settings.jsonc > hardcoded default
@@ -114,6 +116,9 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
             boolean useMrc = !noMrc && settings.getBoolean("pipeline.mrc.enabled", true);
             boolean usePdfa = pdfa != null ? pdfa : settings.getBoolean("pdf.pdfa.enabled", false);
+            System.out.println("  DPI:    " + resolvedDpi);
+            System.out.println("  PSM:    " + resolvedPsm);
+            System.out.println("  MRC:    " + (useMrc ? "on" : "off"));
             ImageSegmenter segmenter = new ImageSegmenter(
                     settings.getInt("segmenter.tileSize", 64),
                     settings.getDouble("segmenter.percentile", 0.95),
@@ -177,6 +182,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
         try (PDDocument source = Loader.loadPDF(inputFile)) {
             PDFRenderer renderer = new PDFRenderer(source);
             int pageCount = source.getNumberOfPages();
+            int srcWords = countWords(source);
+            System.out.println("  Pages:  " + pageCount);
+            if (srcWords > 0) {
+                System.out.println("  Words:  " + srcWords + " (source text)");
+            }
             long totalStart = System.nanoTime();
 
             System.out.println("  Processing " + pageCount + " pages...");
@@ -327,6 +337,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     System.out.printf("  Total: %d pages in %d:%02d%n", pageCount,
                             totalElapsed / 60, totalElapsed % 60);
 
+                    int outWords = countOcrWords(ocrResults);
+                    System.out.println("  Output: " + outputFile.getName() + " (" + formatSize(outputFile.length()) + ")");
+                    System.out.println("  Words:  " + outWords + " (OCR)");
+
                     long tEnd = System.nanoTime();
                     double asmWall = (tEnd - processingDone) / 1e9;
                     double totalDouble = (tEnd - pipelineStart) / 1e9;
@@ -375,6 +389,30 @@ public class TrulyFreeOCR implements Callable<Integer> {
             }
         }
         dir.delete();
+    }
+
+    private static String formatSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.0f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    private static int countWords(PDDocument doc) throws IOException {
+        PDFTextStripper stripper = new PDFTextStripper();
+        String text = stripper.getText(doc).trim();
+        if (text.isEmpty()) return 0;
+        return text.split("\\s+").length;
+    }
+
+    private static int countOcrWords(List<PageResult> results) {
+        int count = 0;
+        for (PageResult page : results) {
+            for (TextBlock tb : page.getTextBlocks()) {
+                String w = tb.getWord().trim();
+                if (!w.isEmpty()) count++;
+            }
+        }
+        return count;
     }
 
     public static void main(String[] args) {
