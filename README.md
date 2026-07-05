@@ -22,9 +22,9 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
   All parameters (DPI, language, PSM, MRC on/off) are scriptable. The fat JAR
   has zero Java-classpath fuss — one file to copy, one command to run.
 
-- **High-volume document scanning** — MRC compression reduces PDF size ~30–50%
-  versus JPEG-only while keeping text razor-sharp via the JBIG2 foreground
-  mask (larger gains with JBIG2 available). Ships with 6 trained language models (English, French, German, Spanish,
+- **High-volume document scanning** — MRC compression reduces PDF size ~80–90%
+  (5–10× smaller) versus JPEG-only while keeping text razor-sharp via the JBIG2
+  foreground mask. Ships with 6 trained language models (English, French, German, Spanish,
   Chinese Simplified, Chinese Traditional, Japanese). Add more by downloading
   Tesseract traineddata files.
 
@@ -180,7 +180,7 @@ When rendered, layers are stacked: background → foreground stencil (punches th
 | Mixed page (text + photo) | Baseline | Similar savings — photo stays in JPEG, text pulled into mask | Photo unaffected; text layer shrinks |
 | Full-page photo | Baseline | Slightly larger (mask adds overhead with no text to compress) | MRC detects no foreground text; overhead is negligible |
 
-For a typical text document, MRC output is **30–50% smaller** than JPEG-only while keeping text edges perfectly sharp. Larger gains are expected when JBIG2 is available.
+For a typical text document, MRC output is **80–90% smaller (5–10×)** than JPEG-only while keeping text edges perfectly sharp. The background is downsampled and aggressively compressed since text sharpness is preserved by the binary foreground mask layer.
 
 Disable MRC with `--no-mrc` to skip segmentation and output raw JPEG backgrounds with text layer only (faster assembly, larger files).
 

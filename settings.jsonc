@@ -71,10 +71,22 @@
 
     // ===== MRC / Pipeline Mode =====
     // Enable Mixed Raster Content compression.
-    //   true  = segment background (PNG) + foreground (JBIG2) + text layer
+    //   true  = segment background (JPEG) + foreground (JBIG2) + text layer
     //   false = original images (JPEG) + text layer only (no MRC compression)
     // Override via --no-mrc CLI flag.
     "pipeline.mrc.enabled": true,
+
+    // Background downscale factor for MRC (0.1 - 1.0).
+    //   0.33 = 3x downsampling (e.g., 300 DPI → ~100 DPI background)
+    //   1.0  = no downsampling (full resolution)
+    // Text sharpness is preserved by the foreground mask layer.
+    "pipeline.mrc.backgroundScale": 0.33,
+
+    // Pre-encode Gaussian blur sigma for MRC background (0 = off).
+    //   0.8  = mild smoothing (reduces JPEG artifacts, improves compression)
+    //   0    = no smoothing
+    // Safe because text edges come from the mask, not the background.
+    "pipeline.mrc.bgSmoothSigma": 0.8,
 
     // ===== JBIG2 Compression =====
     // Flags passed to the jbig2enc binary.
