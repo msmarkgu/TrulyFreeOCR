@@ -26,8 +26,8 @@ REPORT="$REPORT_DIR/report-threads.md"
 
 THREAD_COUNTS=(1 2 4 8)
 
-TMPDIR=$(mktemp -d /tmp/tfocr-threads-XXXXXX)
-trap 'rm -rf "$TMPDIR"' EXIT
+TMPDIR="$REPO_DIR/temp/benchmark-threads"
+mkdir -p "$TMPDIR"
 
 if [ ! -f "$REPORT" ] || [ ! -s "$REPORT" ]; then
   cat > "$REPORT" <<'EOF'
@@ -78,7 +78,6 @@ for pdf in "${PDFS[@]}"; do
     "$JAVA" -jar "$JAR" --threads "$t" "$pdf" -o "$tmp_out"
     end=$(date +%s.%N)
     elapsed=$(echo "$end - $start" | bc 2>/dev/null || echo "0")
-    rm -f "$tmp_out"
 
     if [ "$t" = "1" ]; then
       base_t="$elapsed"

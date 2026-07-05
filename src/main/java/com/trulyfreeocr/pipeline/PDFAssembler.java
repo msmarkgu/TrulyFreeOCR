@@ -1,12 +1,21 @@
 package com.trulyfreeocr.pipeline;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
@@ -62,6 +71,8 @@ public class PDFAssembler {
     private final MetadataPreserver preserver = new MetadataPreserver();
     private File pdfaFontFile;
     private JBIG2Compressor compressor;
+    private double backgroundScale;
+    private float bgSmoothSigma;
 
     public PDFAssembler() {
         this("HELVETICA", 1f);
@@ -76,6 +87,8 @@ public class PDFAssembler {
         }
         this.font = new PDType1Font(resolved);
         this.minFontSize = minFontSize;
+        this.backgroundScale = 1.0;
+        this.bgSmoothSigma = 0f;
     }
 
     public void setPdfaFont(File fontFile) {
@@ -84,6 +97,114 @@ public class PDFAssembler {
 
     public void setCompressor(JBIG2Compressor compressor) {
         this.compressor = compressor;
+    }
+
+    public void setBackgroundScale(double scale) {
+        this.backgroundScale = Math.max(0.1, Math.min(1.0, scale));
+    }
+
+    public void setBgSmoothSigma(float sigma) {
+        this.bgSmoothSigma = Math.max(0f, sigma);
+    }
+
+    private PDImageXObject encodeBackgroundJpeg(PDDocument doc, BufferedImage image, float quality, boolean hasMask) throws IOException {
+        BufferedImage toEncode = image;
+
+        // Step 1: Pre-encode smoothing (reduces JPEG artifacts, improves compression)
+        // Only when mask is present — without mask, smoothing blur would affect text edges.
+        if (hasMask && bgSmoothSigma > 0f) {
+            toEncode = gaussianBlur(toEncode, bgSmoothSigma);
+        }
+
+        // Step 2: Downsample background (text sharpness preserved by mask)
+        // Only when mask is present — without it, text would be blurry.
+        if (hasMask && backgroundScale < 1.0) {
+            int newW = Math.max(1, (int) Math.round(toEncode.getWidth() * backgroundScale));
+            int newH = Math.max(1, (int) Math.round(toEncode.getHeight() * backgroundScale));
+            BufferedImage scaled = new BufferedImage(newW, newH, BufferedImage.TYPE_3BYTE_BGR);
+            Graphics2D g = scaled.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(toEncode, 0, 0, newW, newH, null);
+            g.dispose();
+            toEncode = scaled;
+        }
+
+        // Step 3: Encode as JPEG with 4:2:0 chroma subsampling + progressive
+        // Using ImageWriter directly instead of JPEGFactory for chroma control
+        ImageWriter writer = null;
+        try {
+            writer = ImageIO.getImageWritersByFormatName("JPEG").next();
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(quality);
+            param.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(8192);
+            writer.setOutput(new MemoryCacheImageOutputStream(baos));
+            writer.write(null, new IIOImage(toEncode, null, null), param);
+
+            return PDImageXObject.createFromByteArray(doc, baos.toByteArray(), "background");
+        } finally {
+            if (writer != null) writer.dispose();
+        }
+    }
+
+    private static BufferedImage gaussianBlur(BufferedImage image, float sigma) {
+        int radius = (int) Math.ceil(2 * sigma);
+        if (radius < 1) return image;
+
+        float[] kernel = new float[2 * radius + 1];
+        float sum = 0;
+        for (int i = -radius; i <= radius; i++) {
+            float v = (float) Math.exp(-(i * i) / (2 * sigma * sigma));
+            kernel[i + radius] = v;
+            sum += v;
+        }
+        for (int i = 0; i < kernel.length; i++) kernel[i] /= sum;
+
+        int w = image.getWidth(), h = image.getHeight();
+        BufferedImage temp = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+
+        // Horizontal pass
+        int[] srcRow = new int[w];
+        int[] dstRow = new int[w];
+        for (int y = 0; y < h; y++) {
+            image.getRGB(0, y, w, 1, srcRow, 0, w);
+            for (int x = 0; x < w; x++) {
+                float r = 0, g = 0, b = 0;
+                for (int k = -radius; k <= radius; k++) {
+                    int sx = Math.max(0, Math.min(w - 1, x + k));
+                    int px = srcRow[sx];
+                    float f = kernel[k + radius];
+                    r += f * ((px >> 16) & 0xFF);
+                    g += f * ((px >> 8) & 0xFF);
+                    b += f * (px & 0xFF);
+                }
+                dstRow[x] = 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b;
+            }
+            temp.setRGB(0, y, w, 1, dstRow, 0, w);
+        }
+
+        // Vertical pass
+        int[] col = new int[h];
+        for (int x = 0; x < w; x++) {
+            for (int y = 0; y < h; y++) col[y] = temp.getRGB(x, y);
+            for (int y = 0; y < h; y++) {
+                float r = 0, g = 0, b = 0;
+                for (int k = -radius; k <= radius; k++) {
+                    int sy = Math.max(0, Math.min(h - 1, y + k));
+                    int px = col[sy];
+                    float f = kernel[k + radius];
+                    r += f * ((px >> 16) & 0xFF);
+                    g += f * ((px >> 8) & 0xFF);
+                    b += f * (px & 0xFF);
+                }
+                result.setRGB(x, y, 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b);
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -153,14 +274,9 @@ public class PDFAssembler {
             // because the foreground stencil preserves text pixels at full sharpness.
             // When no mask exists, the background is the only visual layer, so JPEG
             // at a moderate quality is used directly.
-            PDImageXObject bgXObject;
-            if (foregroundMask == null) {
-                bgXObject = JPEGFactory.createFromImage(output, background, 0.85f);
-            } else {
-                // Background with foreground mask can use lower quality JPEG because
-                // text pixels come from the sharp binary stencil layer, not the background.
-                bgXObject = JPEGFactory.createFromImage(output, background, 0.70f);
-            }
+            boolean hasMask = foregroundMask != null;
+            float bgQuality = hasMask ? 0.50f : 0.85f;
+            PDImageXObject bgXObject = encodeBackgroundJpeg(output, background, bgQuality, hasMask);
             cs.drawImage(bgXObject, 0, 0, pageW, pageH);
 
             // Layer 2: foreground mask as CCITT G4 stencil overlay (JBIG2 when available)
@@ -267,7 +383,7 @@ public class PDFAssembler {
         try (PDPageContentStream cs = new PDPageContentStream(output, outPage)) {
             // Layer 1: background image — lower quality JPEG is safe because the JBIG2
             // foreground mask preserves text pixels at full sharpness.
-            PDImageXObject bgXObject = JPEGFactory.createFromImage(output, background, 0.70f);
+            PDImageXObject bgXObject = encodeBackgroundJpeg(output, background, 0.50f, true);
             cs.drawImage(bgXObject, 0, 0, pageW, pageH);
 
             // Layer 2: JBIG2 foreground mask — combine globals into page stream

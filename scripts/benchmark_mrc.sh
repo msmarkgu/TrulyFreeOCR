@@ -25,8 +25,8 @@ FILTER="${1:-}"
 mkdir -p "$REPORT_DIR"
 REPORT="$REPORT_DIR/report-mrc.md"
 
-TMPDIR=$(mktemp -d /tmp/tfocr-mrc-XXXXXX)
-trap 'rm -rf "$TMPDIR"' EXIT
+TMPDIR="$REPO_DIR/temp/benchmark-mrc"
+mkdir -p "$TMPDIR"
 
 if [ ! -f "$REPORT" ] || [ ! -s "$REPORT" ]; then
   cat > "$REPORT" <<'EOF'
@@ -93,7 +93,6 @@ for pdf in "${PDFS[@]}"; do
     "$mrc_time" \
     "$nomrc_time" >> "$REPORT"
 
-  rm -f "$tmp_mrc" "$tmp_nomrc"
 done
 
 echo "MRC benchmark complete."

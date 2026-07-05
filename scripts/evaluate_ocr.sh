@@ -53,8 +53,8 @@ EOF
     "--------" >> "$REPORT"
 fi
 
-TMPDIR=$(mktemp -d /tmp/tfocr-eval-XXXXXX)
-trap 'rm -rf "$TMPDIR"' EXIT
+TMPDIR="$REPO_DIR/temp/benchmark-eval"
+mkdir -p "$TMPDIR"
 
 if [ -n "$FILTER" ] && [[ "$FILTER" == */* ]]; then
   PDFS=("$FILTER")
