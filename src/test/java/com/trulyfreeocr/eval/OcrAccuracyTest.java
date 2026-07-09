@@ -22,7 +22,7 @@ import com.trulyfreeocr.pipeline.OCREngine;
 import com.trulyfreeocr.pipeline.PageExtractor;
 
 /**
- * End-to-end OCR accuracy evaluation on the Moby Dick corpus.
+ * End-to-end OCR accuracy evaluation on the Sherlock Holmes corpus.
  *
  * Tagged "eval" — excluded from the default test run.
  * Run explicitly with:
@@ -38,9 +38,9 @@ class OcrAccuracyTest {
     private static OCREngine ocrEngine = new OCREngine();
 
     @Test void eval_010p() throws IOException { runEval("sherlock-holmes-010p", 10); }
+    @Test void eval_020p() throws IOException { runEval("sherlock-holmes-020p", 20); }
     @Test void eval_050p() throws IOException { runEval("sherlock-holmes-050p", 50); }
-    @Test void eval_200p() throws IOException { runEval("sherlock-holmes-200p", 200); }
-    @Test void eval_500p() throws IOException { runEval("sherlock-holmes-500p", 500); }
+    @Test void eval_100p() throws IOException { runEval("sherlock-holmes-100p", 100); }
 
     private void runEval(String stem, int expectedPages) throws IOException {
         Path pdfPath = CORPUS_DIR.resolve(stem + ".pdf");

@@ -90,6 +90,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             settings = Settings.load();
         }
 
+        System.out.println();
         System.out.println("TrulyFreeOCR v1.0.0");
         System.out.println("  Input:  " + inputFile + " (" + formatSize(inputFile.length()) + ")");
 
@@ -348,6 +349,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     double totalDouble = (tEnd - pipelineStart) / 1e9;
                     System.out.printf("Done.  prep+ocr %.1fs / asm %.1fs = %.1fs total%n",
                         totalDouble - asmWall, asmWall, totalDouble);
+                    System.out.println();
                 }
             } finally {
                 ocrExecutor.shutdownNow();
