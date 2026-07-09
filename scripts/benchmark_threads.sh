@@ -8,7 +8,13 @@ PDF_DIR="$REPO_DIR/tests/test-files/real-world"
 JAR="$REPO_DIR/build/libs/trulyfreeocr.jar"
 JAVA="$REPO_DIR/jdk/bin/java"
 if [ ! -x "$JAVA" ]; then
-  echo "ERROR: No JDK 21 found at $JAVA"
+  JAVA=$(ls "$REPO_DIR"/jdk/linux/jdk-*/bin/java 2>/dev/null | head -1)
+fi
+if [ ! -x "$JAVA" ]; then
+  JAVA=$(command -v java 2>/dev/null || echo "")
+fi
+if [ ! -x "$JAVA" ]; then
+  echo "ERROR: No Java 21 found. Run bootstrap.sh or set PATH."
   exit 1
 fi
 REPORT_DIR="$REPO_DIR/eval"
