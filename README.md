@@ -24,7 +24,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 - **High-volume document scanning** — MRC compression reduces PDF size ~80–90%
   (5–10× smaller) versus JPEG-only while keeping text razor-sharp via the JBIG2
-  foreground mask. Ships with 6 trained language models (English, French, German, Spanish,
+  foreground mask. Ships with 7 trained language models (English, French, German, Spanish,
   Chinese Simplified, Chinese Traditional, Japanese). Add more by downloading
   Tesseract traineddata files.
 
@@ -220,16 +220,16 @@ CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, 
 
 | Metric | Regular prose pages | Notes |
 |---|---|---|
-| **Word Error Rate** | 0.9% – 3.2% | Well within the 5% target for standard documents |
-| **Character Error Rate** | 0.2% – 1.2% | Sub-character accuracy on clean scans |
-| **Word Recall** | ~95%–99% | Almost all ground-truth words detected |
-| **Word Precision** | ~95%–99% | Very few false positives |
-| **Mean Confidence** | 89.5 – 94.7 | Tesseract per-word confidence score |
+| **Word Error Rate** | 3.9% – 6.8% | Aggregate 5.4% on 10-page Sherlock Holmes corpus |
+| **Character Error Rate** | 1.0% – 2.1% | Sub-character accuracy on clean scans |
+| **Word Recall** | 94.0% – 99.0% | Almost all ground-truth words detected |
+| **Word Precision** | 94.9% – 99.0% | Very few false positives |
+| **Mean Confidence** | 90.0 – 93.6 | Tesseract per-word confidence score |
 
-Results measured on a 10-page public-domain prose corpus at 300 DPI, English language.
-Non-standard layouts (title pages, multi-language extracts) show higher WER (~60–70%)
-but are not representative of typical document content. See [`docs/Evaluation.md`](docs/Evaluation.md)
-for the full methodology, per-page breakdown, and parameter sensitivity plans.
+Results measured on the 10-page Sherlock Holmes prose corpus at 300 DPI, English language.
+The corpus is standard prose throughout — the WER range reflects normal variation across
+pages. See [`docs/Evaluation.md`](docs/Evaluation.md) for the full methodology, per-page
+breakdown, and parameter sensitivity plans.
 
 ---
 
@@ -257,7 +257,7 @@ WER/CER targets, parameter sensitivity sweeps, and performance baselines.
 | **ImageSegmenter** | Pure-Java page segmentation: grayscale conversion → background normalization → Otsu binarization → inpainting. No Leptonica dependency. |
 | **OCREngine** | Delegates to Tesseract CLI (not JNA/Tess4J) via subprocess with TSV output. Avoids native-library version mismatches. |
 | **JBIG2Compressor** | Compresses binary foreground masks via jbig2enc (`-p -s`). Falls back to CCITT Group 4 fax encoding via PDFBox when jbig2enc is unavailable. |
-| **PDFAssembler** | Re-assembles the output PDF: background (JPEG with MRC, lossless PNG without) + CCITT G4 / JBIG2 foreground stencil + invisible OCR text (rendering mode 3, Standard 14 fonts). Copies bookmarks, annotations, and XMP metadata via MetadataPreserver. |
+| **PDFAssembler** | Re-assembles the output PDF: background JPEG (quality 0.50 with MRC, 0.85 without) + CCITT G4 / JBIG2 foreground stencil + invisible OCR text (rendering mode 3, Standard 14 fonts). Copies bookmarks, annotations, and XMP metadata via MetadataPreserver. |
 | **MetadataPreserver** | Copies document info, outlines (bookmarks), per-page annotations, and XMP metadata from source to output. |
 
 ---
@@ -327,7 +327,7 @@ the project-local shared libraries are used instead of system-wide ones.
 | 10 | Integration tests | Done |
 | 11 | Concurrent page processing | Done |
 | 12 | PDF/A-2b output | Done |
-| 13 | 6 language bundles | Done |
+| 13 | 7 language bundles | Done |
 
 </details>
 

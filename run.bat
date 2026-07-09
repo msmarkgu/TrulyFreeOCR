@@ -12,14 +12,19 @@ if "%PROCESSOR_ARCHITECTURE%"=="IA64" set "ARCH=x64"
 rem Resolve TFOCR_JAVA_HOME
 if "%TFOCR_JAVA_HOME%"=="" (
   if exist "%SCRIPT_DIR%jdk\win\" (
+    rem Try versioned subdirectory first
     for /d %%d in ("%SCRIPT_DIR%jdk\win\jdk-*") do (
       if exist "%%d\bin\java.exe" set "TFOCR_JAVA_HOME=%%d"
+    )
+    rem Fallback: flat extraction
+    if not defined TFOCR_JAVA_HOME (
+      if exist "%SCRIPT_DIR%jdk\win\bin\java.exe" set "TFOCR_JAVA_HOME=%SCRIPT_DIR%jdk\win"
     )
   )
 )
 
 if "%TFOCR_JAVA_HOME%"=="" (
-  echo No JDK found in jdk\win\. Run bootstrap.bat or set TFOCR_JAVA_HOME.
+  echo No JDK found. Run bootstrap.bat or set TFOCR_JAVA_HOME.
   exit /b 1
 )
 

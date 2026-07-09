@@ -20,22 +20,26 @@ esac
 # Resolve TFOCR_JAVA_HOME
 if [ -z "${TFOCR_JAVA_HOME:-}" ]; then
   if [ -d "$SCRIPT_DIR/jdk/$OS" ]; then
-    # Find the JDK directory inside
+    # Try versioned subdirectory first, then flat extraction
     JDK_DIR=$(ls -d "$SCRIPT_DIR/jdk/$OS"/jdk-* 2>/dev/null | head -1)
-    if [ -n "$JDK_DIR" ]; then
-      if [ "$OS" = "mac" ]; then
+    if [ -z "$JDK_DIR" ]; then
+      JDK_DIR="$SCRIPT_DIR/jdk/$OS"
+    fi
+    if [ "$OS" = "mac" ]; then
+      if [ -d "$JDK_DIR/Contents/Home" ]; then
         export TFOCR_JAVA_HOME="$JDK_DIR/Contents/Home"
       else
         export TFOCR_JAVA_HOME="$JDK_DIR"
       fi
     else
-      echo "No JDK found in jdk/$OS/. Run bootstrap.sh or set TFOCR_JAVA_HOME."
-      exit 1
+      export TFOCR_JAVA_HOME="$JDK_DIR"
     fi
-  else
-    echo "No JDK found in jdk/$OS/. Run bootstrap.sh or set TFOCR_JAVA_HOME."
-    exit 1
   fi
+fi
+
+if [ -z "${TFOCR_JAVA_HOME:-}" ] || [ ! -x "$TFOCR_JAVA_HOME/bin/java" ]; then
+  echo "No JDK found. Run bootstrap.sh or set TFOCR_JAVA_HOME."
+  exit 1
 fi
 
 JAVA="$TFOCR_JAVA_HOME/bin/java"

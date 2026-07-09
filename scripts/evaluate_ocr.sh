@@ -9,7 +9,13 @@ PDF_DIR="$REPO_DIR/tests/test-files/real-world"
 JAR="$REPO_DIR/build/libs/trulyfreeocr.jar"
 JAVA="$REPO_DIR/jdk/bin/java"
 if [ ! -x "$JAVA" ]; then
-  echo "ERROR: No JDK 21 found at $JAVA"
+  JAVA=$(ls "$REPO_DIR"/jdk/linux/jdk-*/bin/java 2>/dev/null | head -1)
+fi
+if [ ! -x "$JAVA" ]; then
+  JAVA=$(command -v java 2>/dev/null || echo "")
+fi
+if [ ! -x "$JAVA" ]; then
+  echo "ERROR: No Java 21 found. Run bootstrap.sh or set PATH."
   exit 1
 fi
 REPORT_DIR="$REPO_DIR/eval"
@@ -22,7 +28,12 @@ fi
 
 RUNNER_SRC="$SCRIPT_DIR/$RUNNER_CLASS.java"
 RUNNER_CLASSFILE="$SCRIPT_DIR/$RUNNER_CLASS.class"
-JAVAC="$REPO_DIR/jdk/bin/javac"
+JAVAC="${JAVA%java}javac"
+if [ ! -x "$JAVAC" ]; then
+  echo "ERROR: javac not found alongside $JAVA"
+  exit 1
+fi
+
 if [ ! -f "$RUNNER_CLASSFILE" ] || [ "$RUNNER_SRC" -nt "$RUNNER_CLASSFILE" ]; then
   echo "Compiling EvalOcrRunner ..."
   "$JAVAC" -d "$SCRIPT_DIR" "$RUNNER_SRC"

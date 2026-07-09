@@ -56,7 +56,23 @@ fi
 echo "JDK home: $JAVA_HOME_PATH"
 export TFOCR_JAVA_HOME="$JAVA_HOME_PATH"
 
-# ── 2. Download jbig2enc ────────────────────────────────────────────────────
+# ── 2. Download Tesseract language data ─────────────────────────────────────
+TESSDATA_DIR="$SCRIPT_DIR/tessdata"
+mkdir -p "$TESSDATA_DIR"
+
+LANGUAGES="eng fra deu spa chi_sim chi_tra jpn"
+for lang in $LANGUAGES; do
+  if [ ! -f "$TESSDATA_DIR/${lang}.traineddata" ]; then
+    echo "Downloading ${lang}.traineddata..."
+    curl -fsSL -o "$TESSDATA_DIR/${lang}.traineddata" \
+      "https://github.com/tesseract-ocr/tessdata/raw/main/${lang}.traineddata"
+  else
+    echo "${lang}.traineddata already present"
+  fi
+done
+echo "Tessdata downloaded to $TESSDATA_DIR (${LANGUAGES})"
+
+# ── 3. Download jbig2enc ────────────────────────────────────────────────────
 NATIVE_DIR="$SCRIPT_DIR/native/$OS"
 mkdir -p "$NATIVE_DIR"
 
