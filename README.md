@@ -37,7 +37,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 ## Why TrulyFreeOCR
 
-A survey of 19 open-source OCR projects (see [`similar-projects.md`](similar-projects.md)) found none that combine all five requirements for production document processing:
+A survey of 19 open-source OCR projects (see [`docs/similar-projects.md`](docs/similar-projects.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
 - **Self-contained** — single fat JAR + `bootstrap.sh`; no Python, no system deps
@@ -162,6 +162,8 @@ Output PDF (searchable, compressed; optionally PDF/A-2b)
 
 ## Mixed Raster Content (MRC) Compression
 
+MRC is an international standard (ITU-T T.44 / ISO/IEC 16485) for compound image compression — see the [Wikipedia article](https://en.wikipedia.org/wiki/Mixed_raster_content) for background.
+
 TrulyFreeOCR uses an MRC-like approach (ISO 32000-2 / TIFF-FX) to decompose each page into three layers, each compressed with a codec suited to its content:
 
 | Layer | Content | Codec | Rationale |
@@ -226,7 +228,7 @@ CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, 
 
 Results measured on a 10-page public-domain prose corpus at 300 DPI, English language.
 Non-standard layouts (title pages, multi-language extracts) show higher WER (~60–70%)
-but are not representative of typical document content. See [`Evaluation.md`](Evaluation.md)
+but are not representative of typical document content. See [`docs/Evaluation.md`](docs/Evaluation.md)
 for the full methodology, per-page breakdown, and parameter sensitivity plans.
 
 ---
@@ -242,7 +244,7 @@ Regenerate test PDFs with:
 ./gradlew generateTestPdfs
 ```
 
-See [`Evaluation.md`](Evaluation.md) for the OCR accuracy evaluation plan —
+See [`docs/Evaluation.md`](docs/Evaluation.md) for the OCR accuracy evaluation plan —
 WER/CER targets, parameter sensitivity sweeps, and performance baselines.
 
 ---
