@@ -50,7 +50,7 @@ public class Settings {
     /**
      * Returns the singleton instance.  Must be preceded by a call to load().
      */
-    public static Settings getInstance() {
+    public static synchronized Settings getInstance() {
         if (instance == null) {
             instance = new Settings();
         }
