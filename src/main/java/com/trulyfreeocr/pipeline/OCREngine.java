@@ -13,6 +13,7 @@ import javax.imageio.ImageIO;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
+import com.trulyfreeocr.util.PlatformUtils;
 
 public class OCREngine {
 
@@ -67,7 +68,10 @@ public class OCREngine {
             // cores, causing N parallel invocations to thrash each other and time out.
             pb.environment().put("OMP_THREAD_LIMIT", "1");
             pb.redirectErrorStream(true);
-            pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
+            File nullDevice = PlatformUtils.detectOs() == PlatformUtils.Os.WINDOWS
+                    ? new File("NUL")
+                    : new File("/dev/null");
+            pb.redirectInput(ProcessBuilder.Redirect.from(nullDevice));
 
             process = pb.start();
             Process proc = process;
