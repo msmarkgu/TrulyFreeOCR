@@ -79,10 +79,10 @@ public class SubprocessRunner {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
             throw new IOException("Process was interrupted", e);
+        } finally {
+            try { outDrainer.join(5000); } catch (InterruptedException ignored) { }
+            try { errDrainer.join(5000); } catch (InterruptedException ignored) { }
         }
-
-        try { outDrainer.join(5000); } catch (InterruptedException ignored) { }
-        try { errDrainer.join(5000); } catch (InterruptedException ignored) { }
 
         int exitCode = process.exitValue();
         return new Result(exitCode, stdoutBuf.toByteArray(), stderrBuf.toByteArray());
