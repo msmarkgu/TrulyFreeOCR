@@ -27,6 +27,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 public class PageExtractor implements AutoCloseable {
 
     private PDDocument document;
+    private PDFRenderer renderer;
     private final float dpi;
 
     public PageExtractor() {
@@ -60,6 +61,7 @@ public class PageExtractor implements AutoCloseable {
      */
     public void load(File pdf) throws IOException {
         document = Loader.loadPDF(pdf);
+        renderer = new PDFRenderer(document);
     }
 
     public int getPageCount() {
@@ -67,7 +69,6 @@ public class PageExtractor implements AutoCloseable {
     }
 
     public BufferedImage renderPage(int index) throws IOException {
-        PDFRenderer renderer = new PDFRenderer(document);
         return renderer.renderImageWithDPI(index, dpi);
     }
 
@@ -76,5 +77,6 @@ public class PageExtractor implements AutoCloseable {
         if (document != null) {
             document.close();
         }
+        renderer = null;
     }
 }
