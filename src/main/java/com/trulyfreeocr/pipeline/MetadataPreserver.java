@@ -3,11 +3,14 @@ package com.trulyfreeocr.pipeline;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
@@ -105,6 +108,9 @@ public class MetadataPreserver {
             COSArray dstAnnots = new COSArray();
             for (PDAnnotation ann : annotations) {
                 COSDictionary cloned = deepCopyCOSDictionary(ann.getCOSObject());
+                // Strip /P (parent page) — the cloned annotation dictionary should not
+                // carry a reference back to the source page.
+                cloned.removeItem(COSName.P);
                 dstAnnots.add(cloned);
             }
             dstPage.getCOSObject().setItem(COSName.ANNOTS, dstAnnots);
@@ -126,39 +132,43 @@ public class MetadataPreserver {
     }
 
     private static COSDictionary deepCopyCOSDictionary(COSDictionary original) {
+        return deepCopyCOSDictionary(original, new IdentityHashMap<>());
+    }
+
+    private static COSStream deepCopyCOSStream(COSStream original) {
+        return deepCopyCOSStream(original, new IdentityHashMap<>());
+    }
+
+    private static COSArray deepCopyCOSArray(COSArray original) {
+        return deepCopyCOSArray(original, new IdentityHashMap<>());
+    }
+
+    private static COSDictionary deepCopyCOSDictionary(COSDictionary original,
+                                                        IdentityHashMap<COSBase, COSBase> visited) {
+        COSBase existing = visited.get(original);
+        if (existing instanceof COSDictionary d) return d;
+
         COSDictionary copy = new COSDictionary();
+        visited.put(original, copy);
         for (var entry : original.entrySet()) {
             COSName key = entry.getKey();
-            var value = entry.getValue();
-            if (value instanceof COSStream stream) {
-                copy.setItem(key, deepCopyCOSStream(stream));
-            } else if (value instanceof COSDictionary dict) {
-                copy.setItem(key, deepCopyCOSDictionary(dict));
-            } else if (value instanceof COSArray arr) {
-                copy.setItem(key, deepCopyCOSArray(arr));
-            } else {
-                copy.setItem(key, value);
-            }
+            copy.setItem(key, deepCopyValue(entry.getValue(), visited));
         }
         return copy;
     }
 
-    private static COSStream deepCopyCOSStream(COSStream original) {
+    private static COSStream deepCopyCOSStream(COSStream original,
+                                                IdentityHashMap<COSBase, COSBase> visited) {
+        COSBase existing = visited.get(original);
+        if (existing instanceof COSStream s) return s;
+
         COSStream copy = new COSStream();
-        // Copy all dictionary entries except /Length (will be set by PDFBox)
+        visited.put(original, copy);
         for (var entry : original.entrySet()) {
             COSName key = entry.getKey();
             if (COSName.LENGTH.equals(key)) continue;
-            var value = entry.getValue();
-            if (value instanceof COSDictionary dict) {
-                copy.setItem(key, deepCopyCOSDictionary(dict));
-            } else if (value instanceof COSArray arr) {
-                copy.setItem(key, deepCopyCOSArray(arr));
-            } else {
-                copy.setItem(key, value);
-            }
+            copy.setItem(key, deepCopyValue(entry.getValue(), visited));
         }
-        // Copy the stream data (decode → re-encode to avoid filter chain issues)
         try (InputStream in = original.createInputStream();
              OutputStream out = copy.createOutputStream()) {
             in.transferTo(out);
@@ -168,17 +178,40 @@ public class MetadataPreserver {
         return copy;
     }
 
-    private static COSArray deepCopyCOSArray(COSArray original) {
+    private static COSArray deepCopyCOSArray(COSArray original,
+                                              IdentityHashMap<COSBase, COSBase> visited) {
+        COSBase existing = visited.get(original);
+        if (existing instanceof COSArray a) return a;
+
         COSArray copy = new COSArray();
+        visited.put(original, copy);
         for (var value : original) {
-            if (value instanceof COSDictionary dict) {
-                copy.add(deepCopyCOSDictionary(dict));
-            } else if (value instanceof COSArray arr) {
-                copy.add(deepCopyCOSArray(arr));
-            } else {
-                copy.add(value);
-            }
+            copy.add(deepCopyValue(value, visited));
         }
         return copy;
+    }
+
+    /**
+     * Deep-copies a COS value.  COSObject indirect references are left as-is
+     * because they are internal to the metadata tree being copied (outline
+     * items reference each other via COSObject).  Cross-document references
+     * to page objects are handled by stripping known page-dependent keys
+     * (e.g. /P from annotation dictionaries) in the caller.
+     */
+    private static COSBase deepCopyValue(COSBase value,
+                                          IdentityHashMap<COSBase, COSBase> visited) {
+        if (value instanceof COSStream stream) {
+            return deepCopyCOSStream(stream, visited);
+        }
+        if (value instanceof COSDictionary dict) {
+            return deepCopyCOSDictionary(dict, visited);
+        }
+        if (value instanceof COSArray arr) {
+            return deepCopyCOSArray(arr, visited);
+        }
+        // COSObject (indirect references) and primitive COS types are left
+        // as-is — they are immutable value objects or references valid within
+        // the copied subtree.
+        return value;
     }
 }
