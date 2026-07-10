@@ -83,6 +83,7 @@ public class PDFAssembler {
     private final float minFontSize;
     private final MetadataPreserver preserver = new MetadataPreserver();
     private File pdfaFontFile;
+    private PDFont pdfaFont;
     private JBIG2Compressor compressor;
     private double backgroundScale;
     private float bgSmoothSigma;
@@ -315,9 +316,13 @@ public class PDFAssembler {
             // Layer 3: invisible OCR text
             float scaleX = pageW / ocr.getWidth();
             float scaleY = pageH / ocr.getHeight();
-            PDFont pageFont = (pdfaFontFile != null && pdfaFontFile.exists())
-                    ? PDType0Font.load(output, pdfaFontFile)
-                    : font;
+            PDFont pageFont = font;
+            if (pdfaFontFile != null && pdfaFontFile.exists()) {
+                if (pdfaFont == null) {
+                    pdfaFont = PDType0Font.load(output, pdfaFontFile);
+                }
+                pageFont = pdfaFont;
+            }
             cs.beginText();
             cs.setFont(pageFont, minFontSize);
             cs.setRenderingMode(RenderingMode.NEITHER);
@@ -346,6 +351,7 @@ public class PDFAssembler {
         if (usePdfa) {
             addPdfaMetadata(output);
         }
+        pdfaFont = null;
     }
 
     private PDImageXObject createJbig2ImageXObject(PDDocument doc, JBIG2Compressor.CompressionResult result) throws IOException {
@@ -417,9 +423,13 @@ public class PDFAssembler {
             // Layer 3: invisible OCR text
             float scaleX = pageW / ocr.getWidth();
             float scaleY = pageH / ocr.getHeight();
-            PDFont pageFont = (pdfaFontFile != null && pdfaFontFile.exists())
-                    ? PDType0Font.load(output, pdfaFontFile)
-                    : font;
+            PDFont pageFont = font;
+            if (pdfaFontFile != null && pdfaFontFile.exists()) {
+                if (pdfaFont == null) {
+                    pdfaFont = PDType0Font.load(output, pdfaFontFile);
+                }
+                pageFont = pdfaFont;
+            }
             cs.beginText();
             cs.setFont(pageFont, minFontSize);
             cs.setRenderingMode(RenderingMode.NEITHER);
