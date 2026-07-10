@@ -18,6 +18,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
+import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -359,6 +360,41 @@ class PDFAssemblerRegressionTest {
                 assertTrue(foundJbig2,
                     "Page " + i + " should have a JBIG2-encoded XObject");
             }
+        }
+    }
+
+    /**
+     * Verifies PDF/A output includes an OutputIntent with the sRGB profile.
+     *
+     * Bug #2: The sRGB Color Space Profile.icm was missing from classpath,
+     * causing the OutputIntent block to be silently skipped. Any PDF generated
+     * under --pdfa would fail strict PDF/A validation.
+     */
+    @Test
+    void pdfaOutput_includesOutputIntent() throws IOException {
+        File source = createSourcePdf();
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("PDFA", new Rectangle(10, 100, 120, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+
+        PDFAssembler assembler = new PDFAssembler();
+        try (PDDocument doc = assembler.assemble(source, Collections.singletonList(bg),
+                null, Collections.singletonList(ocr), true)) {
+
+            var catalog = doc.getDocumentCatalog();
+            var intents = catalog.getOutputIntents();
+            assertNotNull(intents, "OutputIntents should not be null");
+            assertFalse(intents.isEmpty(), "OutputIntents should not be empty");
+
+            PDOutputIntent intent = intents.get(0);
+            assertTrue(intent.getOutputCondition().toLowerCase().contains("srgb"),
+                    "OutputIntent condition should reference sRGB, got: "
+                    + intent.getOutputCondition());
         }
     }
 
