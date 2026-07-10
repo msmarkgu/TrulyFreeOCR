@@ -173,8 +173,8 @@ class OcrAccuracyTest {
 
     private List<String> normalize(List<String> words) {
         return words.stream()
-                .map(w -> w.replaceAll("^[^a-zA-Z0-9]+", ""))
-                .map(w -> w.replaceAll("[^a-zA-Z0-9]+$", ""))
+                .map(w -> w.replaceAll("^[^\\p{L}\\p{N}]+", ""))
+                .map(w -> w.replaceAll("[^\\p{L}\\p{N}]+$", ""))
                 .map(String::toLowerCase)
                 .filter(w -> !w.isEmpty())
                 .collect(Collectors.toList());
