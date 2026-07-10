@@ -57,20 +57,17 @@ class OcrAccuracyTest {
     }
 
     private void evaluateDocument(File pdf, GroundTruth gt) throws IOException {
-        List<BufferedImage> pages;
-        try (PageExtractor pe = extractor) {
-            pages = pe.extractPages(pdf);
-        }
-
-        int n = Math.min(pages.size(), gt.getPageCount());
-        List<PageResult> results = new ArrayList<>(n);
-
         Path tempDir = Files.createTempDirectory("tfocr-eval-");
         long totalStart = System.currentTimeMillis();
 
-        try {
-            for (int i = 0; i < pages.size(); i++) {
-                BufferedImage page = pages.get(i);
+        try (PageExtractor pe = extractor) {
+            pe.load(pdf);
+            int n = Math.min(pe.getPageCount(), gt.getPageCount());
+            List<PageResult> results = new ArrayList<>(n);
+
+            // Stream pages one at a time to avoid OOM
+            for (int i = 0; i < n; i++) {
+                BufferedImage page = pe.renderPage(i);
                 if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
                     BufferedImage gray = new BufferedImage(page.getWidth(), page.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
                     Graphics2D g = gray.createGraphics();
@@ -79,86 +76,87 @@ class OcrAccuracyTest {
                     page = gray;
                 }
                 ImageIO.write(page, "bmp", tempDir.resolve("page-" + i + ".bmp").toFile());
+                // page goes out of scope here — only one page in memory at a time
             }
 
             for (int i = 0; i < n; i++) {
                 long start = System.currentTimeMillis();
                 PageResult result = ocrEngine.ocr(i, tempDir.toFile());
-            long elapsed = System.currentTimeMillis() - start;
-            results.add(result);
+                long elapsed = System.currentTimeMillis() - start;
+                results.add(result);
 
-            List<String> gtWords = normalize(gt.getWords(i));
-            List<String> ocrWords = normalize(result.getTextBlocks().stream()
-                    .map(tb -> tb.getWord()).collect(Collectors.toList()));
+                List<String> gtWords = normalize(gt.getWords(i));
+                List<String> ocrWords = normalize(result.getTextBlocks().stream()
+                        .map(tb -> tb.getWord()).collect(Collectors.toList()));
 
-            double pageWer = Levenshtein.wer(ocrWords, gtWords);
-            String gtText = String.join(" ", gtWords);
-            String ocrText = String.join(" ", ocrWords);
-            double pageCer = Levenshtein.cer(ocrText, gtText);
-            double recall = computeRecall(ocrWords, gtWords);
-            double precision = computePrecision(ocrWords, gtWords);
-            double meanConf = result.getTextBlocks().stream()
-                    .mapToDouble(tb -> tb.getConfidence()).average().orElse(0);
+                double pageWer = Levenshtein.wer(ocrWords, gtWords);
+                String gtText = String.join(" ", gtWords);
+                String ocrText = String.join(" ", ocrWords);
+                double pageCer = Levenshtein.cer(ocrText, gtText);
+                double recall = computeRecall(ocrWords, gtWords);
+                double precision = computePrecision(ocrWords, gtWords);
+                double meanConf = result.getTextBlocks().stream()
+                        .mapToDouble(tb -> tb.getConfidence()).average().orElse(0);
 
-            String flag = pageWer > WER_THRESHOLD ? " ***" : "";
-            System.out.printf("  Page %3d: WER=%.1f%%  CER=%.1f%%  recall=%.1f%%  prec=%.1f%%  conf=%.1f  time=%.2fs%s%n",
-                    i + 1, pageWer * 100, pageCer * 100, recall * 100, precision * 100,
-                    meanConf, elapsed / 1000.0, flag);
-        }
-
-        long totalTime = System.currentTimeMillis() - totalStart;
-
-        // Aggregate metrics
-        List<String> allGt = new ArrayList<>();
-        List<String> allOcr = new ArrayList<>();
-        int totalGtWords = 0, totalOcrWords = 0;
-        double sumConf = 0;
-        int confCount = 0;
-        int flaggedPages = 0;
-
-        for (int i = 0; i < n; i++) {
-            List<String> gw = normalize(gt.getWords(i));
-            List<String> ow = normalize(results.get(i).getTextBlocks().stream()
-                    .map(tb -> tb.getWord()).collect(Collectors.toList()));
-            allGt.addAll(gw);
-            allOcr.addAll(ow);
-            totalGtWords += gw.size();
-            totalOcrWords += ow.size();
-            for (var tb : results.get(i).getTextBlocks()) {
-                sumConf += tb.getConfidence();
-                confCount++;
+                String flag = pageWer > WER_THRESHOLD ? " ***" : "";
+                System.out.printf("  Page %3d: WER=%.1f%%  CER=%.1f%%  recall=%.1f%%  prec=%.1f%%  conf=%.1f  time=%.2fs%s%n",
+                        i + 1, pageWer * 100, pageCer * 100, recall * 100, precision * 100,
+                        meanConf, elapsed / 1000.0, flag);
             }
 
-            double pageWer = Levenshtein.wer(ow, gw);
-            if (pageWer > WER_THRESHOLD) flaggedPages++;
-        }
+            long totalTime = System.currentTimeMillis() - totalStart;
 
-        String gtFull = String.join(" ", allGt);
-        String ocrFull = String.join(" ", allOcr);
+            // Aggregate metrics
+            List<String> allGt = new ArrayList<>();
+            List<String> allOcr = new ArrayList<>();
+            int totalGtWords = 0, totalOcrWords = 0;
+            double sumConf = 0;
+            int confCount = 0;
+            int flaggedPages = 0;
 
-        double aggregateWer = Levenshtein.wer(allOcr, allGt);
-        double aggregateCer = Levenshtein.cer(ocrFull, gtFull);
-        double aggregateRecall = computeRecall(allOcr, allGt);
-        double aggregatePrecision = computePrecision(allOcr, allGt);
-        double meanConf = confCount > 0 ? sumConf / confCount : 0;
+            for (int i = 0; i < n; i++) {
+                List<String> gw = normalize(gt.getWords(i));
+                List<String> ow = normalize(results.get(i).getTextBlocks().stream()
+                        .map(tb -> tb.getWord()).collect(Collectors.toList()));
+                allGt.addAll(gw);
+                allOcr.addAll(ow);
+                totalGtWords += gw.size();
+                totalOcrWords += ow.size();
+                for (var tb : results.get(i).getTextBlocks()) {
+                    sumConf += tb.getConfidence();
+                    confCount++;
+                }
 
-        if (flaggedPages > 0) {
-            System.out.println("\n  Pages with WER > " + (WER_THRESHOLD * 100) + "%: " + flaggedPages + " / " + n);
-        } else {
-            System.out.println("\n  Pages with WER > " + (WER_THRESHOLD * 100) + "%: none");
-        }
+                double pageWer = Levenshtein.wer(ow, gw);
+                if (pageWer > WER_THRESHOLD) flaggedPages++;
+            }
 
-        System.out.println("\n  Document summary:");
-        System.out.printf("    Pages:                %d%n", n);
-        System.out.printf("    Total GT words:       %d%n", totalGtWords);
-        System.out.printf("    Total OCR words:      %d%n", totalOcrWords);
-        System.out.printf("    Aggregate WER:        %.1f%%%n", aggregateWer * 100);
-        System.out.printf("    Aggregate CER:        %.1f%%%n", aggregateCer * 100);
-        System.out.printf("    Word recall:          %.1f%%%n", aggregateRecall * 100);
-        System.out.printf("    Word precision:       %.1f%%%n", aggregatePrecision * 100);
-        System.out.printf("    Mean confidence:      %.1f%n", meanConf);
-        System.out.printf("    Total time:           %.1fs%n", totalTime / 1000.0);
-        System.out.printf("    Time per page:        %.2fs%n", totalTime / 1000.0 / n);
+            String gtFull = String.join(" ", allGt);
+            String ocrFull = String.join(" ", allOcr);
+
+            double aggregateWer = Levenshtein.wer(allOcr, allGt);
+            double aggregateCer = Levenshtein.cer(ocrFull, gtFull);
+            double aggregateRecall = computeRecall(allOcr, allGt);
+            double aggregatePrecision = computePrecision(allOcr, allGt);
+            double meanConf = confCount > 0 ? sumConf / confCount : 0;
+
+            if (flaggedPages > 0) {
+                System.out.println("\n  Pages with WER > " + (WER_THRESHOLD * 100) + "%: " + flaggedPages + " / " + n);
+            } else {
+                System.out.println("\n  Pages with WER > " + (WER_THRESHOLD * 100) + "%: none");
+            }
+
+            System.out.println("\n  Document summary:");
+            System.out.printf("    Pages:                %d%n", n);
+            System.out.printf("    Total GT words:       %d%n", totalGtWords);
+            System.out.printf("    Total OCR words:      %d%n", totalOcrWords);
+            System.out.printf("    Aggregate WER:        %.1f%%%n", aggregateWer * 100);
+            System.out.printf("    Aggregate CER:        %.1f%%%n", aggregateCer * 100);
+            System.out.printf("    Word recall:          %.1f%%%n", aggregateRecall * 100);
+            System.out.printf("    Word precision:       %.1f%%%n", aggregatePrecision * 100);
+            System.out.printf("    Mean confidence:      %.1f%n", meanConf);
+            System.out.printf("    Total time:           %.1fs%n", totalTime / 1000.0);
+            System.out.printf("    Time per page:        %.2fs%n", totalTime / 1000.0 / n);
         } finally {
             File dir = tempDir.toFile();
             File[] files = dir.listFiles();
