@@ -123,23 +123,23 @@ public class PDFAssembler {
     private PDImageXObject encodeBackgroundJpeg(PDDocument doc, BufferedImage image, float quality, boolean hasMask) throws IOException {
         BufferedImage toEncode = image;
 
-        // Step 1: Pre-encode smoothing (reduces JPEG artifacts, improves compression)
-        // Only when mask is present — without mask, smoothing blur would affect text edges.
-        if (hasMask && bgSmoothSigma > 0f) {
-            toEncode = gaussianBlur(toEncode, bgSmoothSigma);
-        }
-
-        // Step 2: Downsample background (text sharpness preserved by mask)
-        // Only when mask is present — without it, text would be blurry.
+        // Step 1: Downsample background (text sharpness preserved by mask).
+        // Do this FIRST so subsequent Gaussian blur runs at reduced resolution (~9x fewer pixels).
         if (hasMask && backgroundScale < 1.0) {
-            int newW = Math.max(1, (int) Math.round(toEncode.getWidth() * backgroundScale));
-            int newH = Math.max(1, (int) Math.round(toEncode.getHeight() * backgroundScale));
+            int newW = Math.max(1, (int) Math.round(image.getWidth() * backgroundScale));
+            int newH = Math.max(1, (int) Math.round(image.getHeight() * backgroundScale));
             BufferedImage scaled = new BufferedImage(newW, newH, BufferedImage.TYPE_3BYTE_BGR);
             Graphics2D g = scaled.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.drawImage(toEncode, 0, 0, newW, newH, null);
+            g.drawImage(image, 0, 0, newW, newH, null);
             g.dispose();
             toEncode = scaled;
+        }
+
+        // Step 2: Pre-encode smoothing (reduces JPEG artifacts, improves compression)
+        // Applied at reduced resolution when downsampling is active.
+        if (hasMask && bgSmoothSigma > 0f) {
+            toEncode = gaussianBlur(toEncode, bgSmoothSigma);
         }
 
         // Step 3: Encode as JPEG with 4:2:0 chroma subsampling + progressive
