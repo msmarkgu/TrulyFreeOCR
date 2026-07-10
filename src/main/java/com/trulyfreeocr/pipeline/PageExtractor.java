@@ -44,15 +44,31 @@ public class PageExtractor implements AutoCloseable {
      * @return List of BufferedImages, one per page, at the configured DPI.
      */
     public List<BufferedImage> extractPages(File pdf) throws IOException {
-        document = Loader.loadPDF(pdf);
-        PDFRenderer renderer = new PDFRenderer(document);
+        load(pdf);
         int pageCount = document.getNumberOfPages();
         List<BufferedImage> pages = new ArrayList<>(pageCount);
         for (int i = 0; i < pageCount; i++) {
-            BufferedImage img = renderer.renderImageWithDPI(i, dpi);
-            pages.add(img);
+            pages.add(renderPage(i));
         }
         return pages;
+    }
+
+    /**
+     * Loads a PDF without rendering any pages.
+     * Call {@link #getPageCount()} and {@link #renderPage(int)} to stream
+     * pages one at a time.
+     */
+    public void load(File pdf) throws IOException {
+        document = Loader.loadPDF(pdf);
+    }
+
+    public int getPageCount() {
+        return document.getNumberOfPages();
+    }
+
+    public BufferedImage renderPage(int index) throws IOException {
+        PDFRenderer renderer = new PDFRenderer(document);
+        return renderer.renderImageWithDPI(index, dpi);
     }
 
     @Override
