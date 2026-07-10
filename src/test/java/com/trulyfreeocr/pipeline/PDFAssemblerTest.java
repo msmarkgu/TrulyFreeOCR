@@ -199,4 +199,130 @@ class PDFAssemblerTest {
             assertTrue(hasStencil, "Output PDF should contain an ImageMask stencil");
         }
     }
+
+    // --- Bug #6: gaussianBlur unit tests ---
+
+    @Test
+    void gaussianBlur_noop_whenSigmaZero() {
+        BufferedImage img = new BufferedImage(10, 10, BufferedImage.TYPE_3BYTE_BGR);
+        assertSame(img, PDFAssembler.gaussianBlur(img, 0f));
+    }
+
+    @Test
+    void gaussianBlur_preservesDimensions() {
+        BufferedImage img = new BufferedImage(7, 13, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage result = PDFAssembler.gaussianBlur(img, 1.5f);
+        assertEquals(7, result.getWidth());
+        assertEquals(13, result.getHeight());
+    }
+
+    @Test
+    void gaussianBlur_smoothensSharpEdge() {
+        int w = 20, h = 20;
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+        Graphics2D g = img.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, w, h);
+        g.setColor(java.awt.Color.BLACK);
+        g.fillRect(0, 0, w / 2, h);
+        g.dispose();
+
+        BufferedImage blurred = PDFAssembler.gaussianBlur(img, 2f);
+
+        // At the boundary (x=10), pixel should be intermediate gray, not pure black/white
+        int boundaryPixel = blurred.getRGB(10, 10);
+        int r = (boundaryPixel >> 16) & 0xFF;
+        int b = boundaryPixel & 0xFF;
+        assertTrue(r > 0 && r < 255,
+                "Boundary pixel should be gray (interpolated), got r=" + r);
+        assertTrue(b > 0 && b < 255,
+                "Boundary pixel should be gray (interpolated), got b=" + b);
+    }
+
+    @Test
+    void gaussianBlur_handlesTinyImage() {
+        BufferedImage img1 = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
+        assertNotNull(PDFAssembler.gaussianBlur(img1, 2f));
+        assertEquals(1, img1.getWidth());
+        assertEquals(1, img1.getHeight());
+
+        BufferedImage img2 = new BufferedImage(2, 2, BufferedImage.TYPE_3BYTE_BGR);
+        assertNotNull(PDFAssembler.gaussianBlur(img2, 2f));
+        assertEquals(2, img2.getWidth());
+        assertEquals(2, img2.getHeight());
+    }
+
+    @Test
+    void gaussianBlur_handlesLargeRadius() {
+        BufferedImage img = new BufferedImage(5, 5, BufferedImage.TYPE_3BYTE_BGR);
+        assertNotNull(PDFAssembler.gaussianBlur(img, 10f));
+    }
+
+    // --- Bug #5: MRC background encoding integration tests ---
+
+    @Test
+    void assemble_withBackgroundScalingAndBlur_producesValidPdf() throws IOException {
+        File input = new File("tests/test-files/generated/simple-text.pdf");
+        var pages = extractor.extractPages(input);
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+        var foregroundMasks = segmented.stream().map(SegmentedImage::getForegroundMask).toList();
+        var ocrResults = ocrPages(engine, pages);
+
+        assembler.setBackgroundScale(0.5);
+        assembler.setBgSmoothSigma(2f);
+        try (PDDocument output = assembler.assemble(input, backgrounds, foregroundMasks, ocrResults, false)) {
+            assertNotNull(output);
+            assertEquals(1, output.getNumberOfPages());
+
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(output);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output PDF should contain 'brown' but got: " + text);
+        }
+    }
+
+    @Test
+    void assemble_withBackgroundBlurOnly_producesValidPdf() throws IOException {
+        File input = new File("tests/test-files/generated/simple-text.pdf");
+        var pages = extractor.extractPages(input);
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+        var foregroundMasks = segmented.stream().map(SegmentedImage::getForegroundMask).toList();
+        var ocrResults = ocrPages(engine, pages);
+
+        assembler.setBackgroundScale(1.0);
+        assembler.setBgSmoothSigma(3f);
+        try (PDDocument output = assembler.assemble(input, backgrounds, foregroundMasks, ocrResults, false)) {
+            assertNotNull(output);
+            assertEquals(1, output.getNumberOfPages());
+
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(output);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output PDF should contain 'brown' but got: " + text);
+        }
+    }
+
+    @Test
+    void assemble_withBackgroundScaleOnly_producesValidPdf() throws IOException {
+        File input = new File("tests/test-files/generated/simple-text.pdf");
+        var pages = extractor.extractPages(input);
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+        var foregroundMasks = segmented.stream().map(SegmentedImage::getForegroundMask).toList();
+        var ocrResults = ocrPages(engine, pages);
+
+        assembler.setBackgroundScale(0.33);
+        assembler.setBgSmoothSigma(0f);
+        try (PDDocument output = assembler.assemble(input, backgrounds, foregroundMasks, ocrResults, false)) {
+            assertNotNull(output);
+            assertEquals(1, output.getNumberOfPages());
+
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(output);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output PDF should contain 'brown' but got: " + text);
+        }
+    }
 }

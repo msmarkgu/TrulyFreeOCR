@@ -162,7 +162,7 @@ public class PDFAssembler {
         }
     }
 
-    private static BufferedImage gaussianBlur(BufferedImage image, float sigma) {
+    static BufferedImage gaussianBlur(BufferedImage image, float sigma) {
         int radius = (int) Math.ceil(2 * sigma);
         if (radius < 1) return image;
 
@@ -199,23 +199,24 @@ public class PDFAssembler {
             temp.setRGB(0, y, w, 1, dstRow, 0, w);
         }
 
-        // Vertical pass
-        int[] col = new int[h];
-        for (int x = 0; x < w; x++) {
-            for (int y = 0; y < h; y++) col[y] = temp.getRGB(x, y);
-            for (int y = 0; y < h; y++) {
+        // Vertical pass (bulk array)
+        int[] pixels = temp.getRGB(0, 0, w, h, null, 0, w);
+        int[] outPixels = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
                 float r = 0, g = 0, b = 0;
                 for (int k = -radius; k <= radius; k++) {
                     int sy = Math.max(0, Math.min(h - 1, y + k));
-                    int px = col[sy];
+                    int px = pixels[sy * w + x];
                     float f = kernel[k + radius];
                     r += f * ((px >> 16) & 0xFF);
                     g += f * ((px >> 8) & 0xFF);
                     b += f * (px & 0xFF);
                 }
-                result.setRGB(x, y, 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b);
+                outPixels[y * w + x] = 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b;
             }
         }
+        result.setRGB(0, 0, w, h, outPixels, 0, w);
 
         return result;
     }
