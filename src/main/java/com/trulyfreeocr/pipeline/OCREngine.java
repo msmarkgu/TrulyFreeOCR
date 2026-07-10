@@ -6,6 +6,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -115,7 +116,8 @@ public class OCREngine {
 
     private List<TextBlock> parseTsv(File tsv) throws IOException {
         List<TextBlock> blocks = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new java.io.FileReader(tsv))) {
+        try (BufferedReader reader = new BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(tsv), StandardCharsets.UTF_8))) {
             String header = reader.readLine();
             if (header == null) return blocks;
 
