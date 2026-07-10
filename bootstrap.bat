@@ -10,6 +10,13 @@ if not exist "%JDK_DIR%" mkdir "%JDK_DIR%"
 set "FORCE_DOWNLOAD=false"
 if /i "%~1"=="--force" set "FORCE_DOWNLOAD=true"
 
+if "%FORCE_DOWNLOAD%"=="true" (
+  echo Forcing re-download of all dependencies...
+  if exist "%JDK_DIR%" rmdir /S /Q "%JDK_DIR%" 2>nul
+  if exist "%TESSDATA_DIR%" rmdir /S /Q "%TESSDATA_DIR%" 2>nul
+  if exist "%TESSERACT_DIR%" rmdir /S /Q "%TESSERACT_DIR%" 2>nul
+)
+
 rem Check if JDK already present
 set "JAVA_EXE="
 if exist "%JDK_DIR%\bin\java.exe" set "JAVA_EXE=%JDK_DIR%\bin\java.exe"
