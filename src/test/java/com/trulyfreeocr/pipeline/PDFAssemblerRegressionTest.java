@@ -27,6 +27,7 @@ import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class PDFAssemblerRegressionTest {
 
@@ -474,6 +475,67 @@ class PDFAssemblerRegressionTest {
                     "XMP metadata should contain author: " + expectedAuthor);
             assertTrue(xmp.contains(expectedTitle),
                     "XMP metadata should contain title: " + expectedTitle);
+        }
+    }
+
+    /**
+     * Verifies that a custom font is loaded once and reused across pages,
+     * rather than being embedded N times for N pages.
+     *
+     * Bug #1 (Claude review): PDType0Font.load() was called per page,
+     * embedding N copies of the font in the output PDF.
+     */
+    @Test
+    void pdfaOutputWithCustomFont_embedsFontOnce() throws IOException {
+        File fontFile = new File("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+        assumeTrue(fontFile.exists(), "DejaVuSans.ttf required for font caching test");
+
+        File source = new File(tempDir, "font-cache-source.pdf");
+        try (PDDocument d = new PDDocument()) {
+            d.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            d.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            d.save(source);
+        }
+
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("Font", new Rectangle(10, 10, 120, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        List<PageResult> ocrResults = new ArrayList<>();
+        ocrResults.add(ocr);
+        ocrResults.add(ocr);
+
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+        List<BufferedImage> bgs = new ArrayList<>();
+        bgs.add(bg);
+        bgs.add(bg);
+
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = new ArrayList<>();
+        masks.add(fgMask);
+        masks.add(fgMask);
+
+        PDFAssembler assembler = new PDFAssembler();
+        assembler.setPdfaFont(fontFile);
+
+        File outputFile = new File(tempDir, "font-cache-output.pdf");
+        PDDocument doc = assembler.assemble(source, bgs, masks, ocrResults, true);
+        doc.save(outputFile);
+        doc.close();
+
+        // Count font objects from the saved file (xref table is populated on save)
+        try (PDDocument saved = Loader.loadPDF(outputFile)) {
+            assertEquals(2, saved.getNumberOfPages(),
+                "Document should have 2 pages");
+
+            // PDType0Font.load() creates two /Type /Font dicts per font:
+            // the Type0 font + its CIDFont descendant.  2 = one font.
+            int fontDictCount = saved.getDocument().getObjectsByType(COSName.FONT).size();
+            assertEquals(2, fontDictCount,
+                "Custom font should create exactly 2 /Type /Font dicts"
+                + " (Type0 + CIDFont), not " + fontDictCount + " (would mean "
+                + (fontDictCount / 2) + " font loads for 2 pages)");
         }
     }
 }
