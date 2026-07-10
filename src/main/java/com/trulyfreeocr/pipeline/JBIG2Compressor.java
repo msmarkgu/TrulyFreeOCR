@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
@@ -105,12 +106,9 @@ public class JBIG2Compressor {
             imagePaths.add(new File(maskDir, "mask-" + i + ".bmp").getAbsolutePath());
         }
 
-        // Use the first mask file's path (without .bmp) as the basename so that
-        // jbig2enc writes deterministic output files alongside the masks:
-        //   <basename>.sym  — shared global symbol dictionary
-        //   <basename>.0000, <basename>.0001, ... — per-page JBIG2 data
-        String firstImage = imagePaths.get(0);
-        String basename = firstImage.replaceAll("\\.bmp$", "");
+        // Use a UUID-scoped basename to keep JBIG2 output files (.sym, .0000, ...)
+        // separate from input BMPs and avoid collision between concurrent runs.
+        String basename = new File(maskDir, "jbig2-" + UUID.randomUUID()).getAbsolutePath();
 
         String flags = Settings.getInstance().getString("jbig2enc.flags", "-p -s");
         List<String> args = new ArrayList<>();
