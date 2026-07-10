@@ -18,6 +18,15 @@ esac
 
 echo "Detected: $OS / $ARCH"
 
+# Derive Debian architecture and multiarch triplet for dynamic package URLs
+DEB_ARCH=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+case "$DEB_ARCH" in
+  amd64) LIB_ARCH="x86_64-linux-gnu" ;;
+  arm64) LIB_ARCH="aarch64-linux-gnu" ;;
+  *)     echo "Warning: unknown Debian arch '$DEB_ARCH', assuming amd64"
+         DEB_ARCH="amd64"; LIB_ARCH="x86_64-linux-gnu" ;;
+esac
+
 # ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
 # Add --force flag to force re-download all dependencies
 FORCE_DOWNLOAD=false
@@ -97,22 +106,22 @@ if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$TESSERACT_DIR/tesseract.bin" ]; then
         cd "$TMPDIR"
         apt-get download tesseract-ocr libtesseract5 liblept5 jbig2 libjbig2enc0t64 2>/dev/null || {
           curl -fsSL -o libtesseract5.deb \
-            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/libtesseract5_5.2.0-1build3_amd64.deb"
+            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/libtesseract5_5.2.0-1build3_${DEB_ARCH}.deb"
           curl -fsSL -o tesseract-ocr.deb \
-            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/tesseract-ocr_5.2.0-1build3_amd64.deb"
+            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/tesseract-ocr_5.2.0-1build3_${DEB_ARCH}.deb"
           curl -fsSL -o liblept5.deb \
-            "http://archive.ubuntu.com/ubuntu/pool/main/l/leptonlib/liblept5_1.82.0-3build3_amd64.deb"
+            "http://archive.ubuntu.com/ubuntu/pool/main/l/leptonlib/liblept5_1.82.0-3build3_${DEB_ARCH}.deb"
           curl -fsSL -o jbig2.deb \
-            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/jbig2_0.29-2.1build1_amd64.deb"
+            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/jbig2_0.29-2.1build1_${DEB_ARCH}.deb"
           curl -fsSL -o libjbig2enc0t64.deb \
-            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/libjbig2enc0t64_0.29-2.1build1_amd64.deb"
+            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/libjbig2enc0t64_0.29-2.1build1_${DEB_ARCH}.deb"
         }
         for deb in "$TMPDIR"/*.deb; do [ -f "$deb" ] && dpkg-deb -x "$deb" "$TMPDIR/extract" 2>/dev/null; done
         # Tesseract binary + shared libs
         if [ -f "$TMPDIR/extract/usr/bin/tesseract" ]; then
           cp "$TMPDIR/extract/usr/bin/tesseract" "$TESSERACT_DIR/tesseract.bin"
           cp -a "$TMPDIR/extract/usr/lib/"*.so* "$TESSERACT_DIR/lib/" 2>/dev/null || true
-          cp -a "$TMPDIR/extract/usr/lib/x86_64-linux-gnu/"*.so* "$TESSERACT_DIR/lib/" 2>/dev/null || true
+          cp -a "$TMPDIR/extract/usr/lib/${LIB_ARCH}/"*.so* "$TESSERACT_DIR/lib/" 2>/dev/null || true
           chmod +x "$TESSERACT_DIR/tesseract.bin"
           echo "Tesseract installed to $TESSERACT_DIR"
         else
@@ -122,7 +131,7 @@ if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$TESSERACT_DIR/tesseract.bin" ]; then
         if [ -f "$TMPDIR/extract/usr/bin/jbig2" ]; then
           cp "$TMPDIR/extract/usr/bin/jbig2" "$JBIG2ENC_DIR/jbig2.bin"
           cp -a "$TMPDIR/extract/usr/lib/"*.so* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
-          cp -a "$TMPDIR/extract/usr/lib/x86_64-linux-gnu/"*.so* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
+          cp -a "$TMPDIR/extract/usr/lib/${LIB_ARCH}/"*.so* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
           chmod +x "$JBIG2ENC_DIR/jbig2.bin"
           echo "jbig2enc installed to $JBIG2ENC_DIR"
         fi
