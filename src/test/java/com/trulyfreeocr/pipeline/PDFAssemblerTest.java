@@ -20,7 +20,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
@@ -36,13 +36,13 @@ import com.trulyfreeocr.model.SegmentedImage;
  */
 class PDFAssemblerTest {
 
-    static PageExtractor extractor;
-    static ImageSegmenter segmenter;
-    static OCREngine engine;
-    static PDFAssembler assembler;
+    PageExtractor extractor;
+    ImageSegmenter segmenter;
+    OCREngine engine;
+    PDFAssembler assembler;
 
-    @BeforeAll
-    static void setup() {
+    @BeforeEach
+    void setup() {
         extractor = new PageExtractor();
         segmenter = new ImageSegmenter();
         engine = new OCREngine();

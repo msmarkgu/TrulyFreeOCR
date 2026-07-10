@@ -34,7 +34,6 @@ class OcrAccuracyTest {
     private static final Path CORPUS_DIR = Path.of("tests/eval-corpus");
     private static final double WER_THRESHOLD = 0.05; // flag pages above 5%
 
-    private static PageExtractor extractor = new PageExtractor();
     private static OCREngine ocrEngine = new OCREngine();
 
     @Test void eval_010p() throws IOException { runEval("sherlock-holmes-010p", 10); }
@@ -60,7 +59,7 @@ class OcrAccuracyTest {
         Path tempDir = Files.createTempDirectory("tfocr-eval-");
         long totalStart = System.currentTimeMillis();
 
-        try (PageExtractor pe = extractor) {
+        try (PageExtractor pe = new PageExtractor()) {
             pe.load(pdf);
             int n = Math.min(pe.getPageCount(), gt.getPageCount());
             List<PageResult> results = new ArrayList<>(n);
