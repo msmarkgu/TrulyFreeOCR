@@ -7,10 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PDF_DIR="$REPO_DIR/tests/test-files/real-world"
 JAR="$REPO_DIR/build/libs/trulyfreeocr.jar"
-JAVA="$REPO_DIR/jdk/bin/java"
-if [ ! -x "$JAVA" ]; then
-  JAVA=$(ls "$REPO_DIR"/jdk/linux/jdk-*/bin/java 2>/dev/null | head -1)
-fi
+JAVA="$REPO_DIR/deps/jdk/bin/java"
 if [ ! -x "$JAVA" ]; then
   JAVA=$(command -v java 2>/dev/null || echo "")
 fi

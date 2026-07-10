@@ -22,3 +22,13 @@
 | copyright-circular-10p.pdf          | 2026-07-04 19:50 |    10 |      511 KB |     5616 KB |    10.97× |    138.2s |     81.6s |
 | usgs-geology-100p.pdf               | 2026-07-04 20:06 |   100 |        0 KB |        0 KB |     0.00× |    363.8s |      2.4s |
 | usgs-geology-100p.pdf               | 2026-07-04 20:19 |   100 |    19743 KB |    73578 KB |     3.72× |   1484.0s |    891.7s |
+| arxiv-sam-30p.pdf                   | 2026-07-09 18:43 |    30 |        0 KB |        0 KB |     0.00× |      2.9s |      3.7s |
+| arxiv-transformers-15.pdf           | 2026-07-09 18:43 |    15 |        0 KB |        0 KB |     0.00× |      2.4s |      1.6s |
+| beige-book-56p.pdf                  | 2026-07-09 18:43 |    56 |        0 KB |        0 KB |     0.00× |      1.3s |      0.5s |
+| copyright-circular-10p.pdf          | 2026-07-09 18:43 |    10 |      511 KB |     5616 KB |    10.97× |      0.8s |      1.0s |
+| crs-cyberattacks-31p.pdf            | 2026-07-09 18:43 |    31 |        0 KB |        0 KB |     0.00× |      0.6s |      0.8s |
+| eu-charter-17p.pdf                  | 2026-07-09 18:43 |    17 |        0 KB |        0 KB |     0.00× |      0.8s |      0.9s |
+| eu-charter-fr-17p.pdf               | 2026-07-09 18:43 |    17 |        0 KB |        0 KB |     0.00× |      0.6s |      0.9s |
+| eu-copyright-directive-34p.pdf      | 2026-07-09 18:43 |    34 |        0 KB |        0 KB |     0.00× |      2.5s |      0.9s |
+| fed-paper-41p.pdf                   | 2026-07-09 18:43 |    41 |        0 KB |        0 KB |     0.00× |      0.6s |      0.4s |
+| usgs-geology-100p.pdf               | 2026-07-09 18:43 |   100 |    19743 KB |    73578 KB |     3.72× |      1.8s |      0.3s |

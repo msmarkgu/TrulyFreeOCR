@@ -58,6 +58,9 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--tessdata-dir"}, description = "Directory containing Tesseract language data")
     private File tessdataDir;
 
+    @Option(names = {"--tesseract-path"}, description = "Path to Tesseract executable")
+    private String tesseractPath;
+
     @Option(names = {"--settings"}, description = "Path to settings.jsonc file")
     private File settingsFile;
 
@@ -101,9 +104,9 @@ public class TrulyFreeOCR implements Callable<Integer> {
             File resolvedTxtOutput = txtOutput != null ? txtOutput
                     : new File(resolvedOutput.getAbsolutePath().replaceAll("\\.pdf$", "") + ".txt");
             String resolvedTessdata = tessdataDir != null ? tessdataDir.getAbsolutePath()
-                    : settings.getString("tessdata.dir", "./tessdata");
+                    : settings.getString("tessdata.dir", "./deps/tesseract/tessdata");
             String resolvedNative = nativeDir != null ? nativeDir.getAbsolutePath()
-                    : settings.getString("native.dir", "native");
+                    : settings.getString("native.dir", "./deps/jbig2enc");
 
             System.out.println("  Output: " + resolvedOutput);
 
@@ -127,7 +130,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             );
             OCREngine ocrEngine = new OCREngine(
                     resolvedTessdata,
-                    settings.getString("tesseract.path", "tesseract"),
+                    tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"),
                     resolvedLang,
                     resolvedPsm
             );

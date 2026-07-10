@@ -26,7 +26,7 @@ if [ "$#" -gt 0 ] && [ "$1" = "--force" ]; then
   echo "Forcing re-download of all dependencies..."
 fi
 
-JDK_DIR="$SCRIPT_DIR/jdk/$OS"
+JDK_DIR="$SCRIPT_DIR/deps/jdk"
 mkdir -p "$JDK_DIR"
 
 if [ "$FORCE_DOWNLOAD" = true ] || [ -z "$(ls -A "$JDK_DIR" 2>/dev/null)" ]; then
@@ -48,20 +48,13 @@ else
   echo "OpenJDK already present in $JDK_DIR"
 fi
 
-# Skip JDK download if already present
-if [ -d "$JDK_DIR/jdk-21*" ]; then
-  echo "OpenJDK 21 already present in $JDK_DIR"
-  JDK_DIR="$JDK_DIR/jdk-21*"
-fi
-
-# Find actual JDK home
+# Find actual JDK home (flat extraction with --strip-components=1)
 if [ "$OS" = "mac" ]; then
-  JAVA_HOME_PATH=$(ls -d "$JDK_DIR"/jdk-*/Contents/Home 2>/dev/null | head -1)
+  JAVA_HOME_PATH=$(ls -d "$JDK_DIR"/jdk-*/Contents/Home 2>/dev/null | head -1 || true)
 else
-  JAVA_HOME_PATH=$(ls -d "$JDK_DIR"/jdk-* 2>/dev/null | head -1)
+  JAVA_HOME_PATH=$(ls -d "$JDK_DIR"/jdk-* 2>/dev/null | head -1 || true)
 fi
 if [ -z "$JAVA_HOME_PATH" ]; then
-  # Try flat extraction
   if [ -x "$JDK_DIR/bin/java" ]; then
     JAVA_HOME_PATH="$JDK_DIR"
   else
@@ -75,10 +68,10 @@ echo "JDK home: $JAVA_HOME_PATH"
 export TFOCR_JAVA_HOME="$JAVA_HOME_PATH"
 
 # ── 2. Download Tesseract language data ─────────────────────────────────────
-TESSDATA_DIR="$SCRIPT_DIR/tessdata"
+TESSDATA_DIR="$SCRIPT_DIR/deps/tesseract/tessdata"
 mkdir -p "$TESSDATA_DIR"
 
-LANGUAGES="eng fra deu spa chi_sim chi_tra jpn"
+LANGUAGES="eng fra deu spa chi_sim chi_tra jpn osd"
 for lang in $LANGUAGES; do
   if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$TESSDATA_DIR/${lang}.traineddata" ]; then
     echo "Downloading ${lang}.traineddata..."
@@ -90,82 +83,114 @@ for lang in $LANGUAGES; do
 done
 echo "Tessdata downloaded to $TESSDATA_DIR (${LANGUAGES})"
 
-# ── 3. Set up native binaries ───────────────────────────────────────────────
-NATIVE_DIR="$SCRIPT_DIR/native/$OS"
-mkdir -p "$NATIVE_DIR"
+# ── 3. Download Tesseract + jbig2enc project-local binaries ────────────
+TESSERACT_DIR="$SCRIPT_DIR/deps/tesseract/$OS"
+JBIG2ENC_DIR="$SCRIPT_DIR/deps/jbig2enc/$OS"
+mkdir -p "$TESSERACT_DIR/lib" "$JBIG2ENC_DIR/lib"
 
+if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$TESSERACT_DIR/tesseract.bin" ]; then
+  echo "Downloading Tesseract and Leptonica for $OS/$ARCH..."
+  TMPDIR=$(mktemp -d)
+  case "$OS" in
+    linux)
+      if command -v apt-get &>/dev/null; then
+        cd "$TMPDIR"
+        apt-get download tesseract-ocr libtesseract5 liblept5 jbig2 libjbig2enc0t64 2>/dev/null || {
+          curl -fsSL -o libtesseract5.deb \
+            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/libtesseract5_5.2.0-1build3_amd64.deb"
+          curl -fsSL -o tesseract-ocr.deb \
+            "http://archive.ubuntu.com/ubuntu/pool/main/t/tesseract/tesseract-ocr_5.2.0-1build3_amd64.deb"
+          curl -fsSL -o liblept5.deb \
+            "http://archive.ubuntu.com/ubuntu/pool/main/l/leptonlib/liblept5_1.82.0-3build3_amd64.deb"
+          curl -fsSL -o jbig2.deb \
+            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/jbig2_0.29-2.1build1_amd64.deb"
+          curl -fsSL -o libjbig2enc0t64.deb \
+            "http://archive.ubuntu.com/ubuntu/pool/universe/j/jbig2enc/libjbig2enc0t64_0.29-2.1build1_amd64.deb"
+        }
+        for deb in "$TMPDIR"/*.deb; do [ -f "$deb" ] && dpkg-deb -x "$deb" "$TMPDIR/extract" 2>/dev/null; done
+        # Tesseract binary + shared libs
+        if [ -f "$TMPDIR/extract/usr/bin/tesseract" ]; then
+          cp "$TMPDIR/extract/usr/bin/tesseract" "$TESSERACT_DIR/tesseract.bin"
+          cp -a "$TMPDIR/extract/usr/lib/"*.so* "$TESSERACT_DIR/lib/" 2>/dev/null || true
+          cp -a "$TMPDIR/extract/usr/lib/x86_64-linux-gnu/"*.so* "$TESSERACT_DIR/lib/" 2>/dev/null || true
+          chmod +x "$TESSERACT_DIR/tesseract.bin"
+          echo "Tesseract installed to $TESSERACT_DIR"
+        else
+          echo "WARNING: Could not extract Tesseract."
+        fi
+        # jbig2enc CLI tool + shared lib
+        if [ -f "$TMPDIR/extract/usr/bin/jbig2" ]; then
+          cp "$TMPDIR/extract/usr/bin/jbig2" "$JBIG2ENC_DIR/jbig2.bin"
+          cp -a "$TMPDIR/extract/usr/lib/"*.so* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
+          cp -a "$TMPDIR/extract/usr/lib/x86_64-linux-gnu/"*.so* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
+          chmod +x "$JBIG2ENC_DIR/jbig2.bin"
+          echo "jbig2enc installed to $JBIG2ENC_DIR"
+        fi
+        # liblept is needed by both — copy to jbig2enc
+        cp -a "$TESSERACT_DIR/lib/liblept"* "$JBIG2ENC_DIR/lib/" 2>/dev/null || true
+      fi
+      ;;
+    mac)
+      if command -v brew &>/dev/null; then
+        echo "Fetching Tesseract via Homebrew..."
+        brew fetch --force --bottle tesseract
+        brew fetch --force --bottle leptonica
+        HOMEBREW_CACHE=$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")
+        for tap in "$HOMEBREW_CACHE"/downloads/*/tesseract--*.tar.gz \
+                   "$HOMEBREW_CACHE"/downloads/*/leptonica--*.tar.gz; do
+          [ -f "$tap" ] && tar -xzf "$tap" -C "$TMPDIR/extract" 2>/dev/null || true
+        done
+        if [ -f "$TMPDIR/extract/usr/local/bin/tesseract" ]; then
+          cp "$TMPDIR/extract/usr/local/bin/tesseract" "$TESSERACT_DIR/tesseract.bin"
+          cp -a "$TMPDIR/extract/usr/local/lib/"*.dylib "$TESSERACT_DIR/lib/" 2>/dev/null || true
+          chmod +x "$TESSERACT_DIR/tesseract.bin"
+          echo "Tesseract installed to $TESSERACT_DIR"
+        else
+          echo "WARNING: Could not extract Tesseract from Homebrew cache."
+        fi
+      fi
+      ;;
+  esac
+  rm -rf "$TMPDIR"
+fi
+
+# Create the tesseract wrapper script
+if [ ! -f "$TESSERACT_DIR/tesseract" ]; then
+  cat > "$TESSERACT_DIR/tesseract" <<WRAPPER
+#!/bin/bash
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+PARENT_DIR="\$(cd "\$SCRIPT_DIR/.." && pwd)"
+export TESSDATA_PREFIX="\${TESSDATA_PREFIX:-\$PARENT_DIR/tessdata}"
+export LD_LIBRARY_PATH="\$SCRIPT_DIR/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+exec "\$SCRIPT_DIR/tesseract.bin" "\$@"
+WRAPPER
+  chmod +x "$TESSERACT_DIR/tesseract"
+  echo "Created Tesseract wrapper at $TESSERACT_DIR/tesseract"
+fi
+
+# Create the jbig2enc wrapper (Java looks for 'jbig2enc', binary is 'jbig2.bin')
+if [ ! -f "$JBIG2ENC_DIR/jbig2enc" ] && [ -x "$JBIG2ENC_DIR/jbig2.bin" ]; then
+  cat > "$JBIG2ENC_DIR/jbig2enc" <<WRAPPER
+#!/bin/bash
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+export LD_LIBRARY_PATH="\$SCRIPT_DIR/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+exec "\$SCRIPT_DIR/jbig2.bin" "\$@"
+WRAPPER
+  chmod +x "$JBIG2ENC_DIR/jbig2enc"
+  echo "Created jbig2enc wrapper at $JBIG2ENC_DIR/jbig2enc"
+fi
+
+# ── 4. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
-  linux)
-    echo "Checking system Tesseract/Leptonica..."
-    if ! command -v tesseract &>/dev/null; then
-      echo "Installing tesseract-ocr..."
-      apt-get update && apt-get install -y tesseract-ocr libleptonica-dev
-    else
-      echo "Tesseract found: $(tesseract --version 2>&1 | head -1)"
-    fi
-
-    # Create tesseract symlink for consistent lookup
-    if [ ! -f "$NATIVE_DIR/tesseract" ]; then
-      TESS_BIN=$(command -v tesseract 2>/dev/null || echo "")
-      if [ -n "$TESS_BIN" ]; then
-        ln -sf "$TESS_BIN" "$NATIVE_DIR/tesseract"
-        echo "Symlinked $NATIVE_DIR/tesseract -> $TESS_BIN"
-      fi
-    fi
-    ;;
-
   mac)
-    echo "Checking system Tesseract/Leptonica..."
-    if ! command -v tesseract &>/dev/null; then
-      echo "Installing tesseract via Homebrew..."
-      brew install tesseract leptonica
-    else
-      echo "Tesseract found: $(tesseract --version 2>&1 | head -1)"
-    fi
-
-    # Create tesseract symlink for consistent lookup
-    if [ ! -f "$NATIVE_DIR/tesseract" ]; then
-      TESS_BIN=$(command -v tesseract 2>/dev/null || echo "")
-      if [ -n "$TESS_BIN" ]; then
-        ln -sf "$TESS_BIN" "$NATIVE_DIR/tesseract"
-        echo "Symlinked $NATIVE_DIR/tesseract -> $TESS_BIN"
-      fi
+    if ! command -v jbig2 &>/dev/null && [ ! -x "$NATIVE_DIR/jbig2" ]; then
+      echo "jbig2enc not found. Install with: brew install jbig2enc"
     fi
     ;;
 esac
 
-# ── 4. Download jbig2enc ────────────────────────────────────────────────────
-if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$NATIVE_DIR/jbig2enc" ] && [ "$OS" != "win" ]; then
-  echo "Downloading jbig2enc for $OS/$ARCH..."
-  case "$OS" in
-    linux)
-      # Download precompiled binary for Linux
-      JBIG2_URL="https://github.com/agl/jbig2enc/releases/download/0.32/jbig2enc-0.32-linux-x86_64"
-      curl -fsSL -o "$NATIVE_DIR/jbig2enc" "$JBIG2_URL"
-      chmod +x "$NATIVE_DIR/jbig2enc"
-      echo "jbig2enc downloaded to $NATIVE_DIR"
-      ;;
-    mac)
-      # Download precompiled binary for macOS
-      JBIG2_URL="https://github.com/agl/jbig2enc/releases/download/0.32/jbig2enc-0.32-macos-x86_64"
-      curl -fsSL -o "$NATIVE_DIR/jbig2enc" "$JBIG2_URL"
-      chmod +x "$NATIVE_DIR/jbig2enc"
-      echo "jbig2enc downloaded to $NATIVE_DIR"
-      ;;
-  esac
-fi
-
-# ── 5. Create run.sh convenience wrapper ────────────────────────────────────
-if [ ! -f "$SCRIPT_DIR/run.sh" ]; then
-  echo '#!/usr/bin/env bash
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export TFOCR_JAVA_HOME="$SCRIPT_DIR/jdk/'"$OS"'"'"'"'"
-exec "$TFOCR_JAVA_HOME/bin/java" -jar "$SCRIPT_DIR/build/libs/trulyfreeocr.jar" "$@"' > "$SCRIPT_DIR/run.sh"
-  chmod +x "$SCRIPT_DIR/run.sh"
-  echo "Created run.sh"
-fi
-
+# ── 5. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"

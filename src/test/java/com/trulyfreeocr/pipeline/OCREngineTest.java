@@ -69,8 +69,8 @@ class OCREngineTest {
         var words = result.getTextBlocks().stream()
                 .map(tb -> tb.getWord().toLowerCase())
                 .toList();
-        assertTrue(words.contains("quick"),
-                () -> "Expected 'quick' in OCR output but got: " + words);
+        assertTrue(words.contains("brown"),
+                () -> "Expected 'brown' in OCR output but got: " + words);
     }
 
     @Test

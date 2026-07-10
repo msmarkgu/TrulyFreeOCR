@@ -32,7 +32,7 @@ public class JBIG2Compressor {
     private final String nativeDir;
 
     public JBIG2Compressor() {
-        this("native");
+        this("deps/jbig2enc");
     }
 
     public JBIG2Compressor(String nativeDir) {
@@ -171,7 +171,7 @@ public class JBIG2Compressor {
     /**
      * Locates the jbig2enc binary for the current OS.
      *
-     * Searches native/{os}/jbig2enc (or jbig2enc.exe on Windows).
+     * Searches deps/jbig2enc/{os}/jbig2enc (or jbig2enc.exe on Windows).
      * The base path can be overridden via system property "tfocr.native.dir"
      * (defaults to "native").
      *

@@ -3,40 +3,21 @@ setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
 
-rem Detect architecture
-if "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "ARCH=x64"
-if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "ARCH=aarch64"
-if "%PROCESSOR_ARCHITECTURE%"=="x86" set "ARCH=x64"
-if "%PROCESSOR_ARCHITECTURE%"=="IA64" set "ARCH=x64"
-
-rem Resolve TFOCR_JAVA_HOME
-if "%TFOCR_JAVA_HOME%"=="" (
-  if exist "%SCRIPT_DIR%jdk\win\" (
-    rem Try versioned subdirectory first
-    for /d %%d in ("%SCRIPT_DIR%jdk\win\jdk-*") do (
-      if exist "%%d\bin\java.exe" set "TFOCR_JAVA_HOME=%%d"
-    )
-    rem Fallback: flat extraction
-    if not defined TFOCR_JAVA_HOME (
-      if exist "%SCRIPT_DIR%jdk\win\bin\java.exe" set "TFOCR_JAVA_HOME=%SCRIPT_DIR%jdk\win"
-    )
-  )
-)
-
-if "%TFOCR_JAVA_HOME%"=="" (
-  echo No JDK found. Run bootstrap.bat or set TFOCR_JAVA_HOME.
-  exit /b 1
-)
-
-set "JAVA=%TFOCR_JAVA_HOME%\bin\java.exe"
+rem Find JDK installed by bootstrap.bat in deps\jdk\
+set "JAVA=%SCRIPT_DIR%deps\jdk\bin\java.exe"
 if not exist "%JAVA%" (
-  echo Java not found at %JAVA%
+  echo No JDK found. Run bootstrap.bat first.
   exit /b 1
 )
 
 set "FAT_JAR=%SCRIPT_DIR%build\libs\trulyfreeocr.jar"
 if not exist "%FAT_JAR%" (
-  "%JAVA%" -jar "%SCRIPT_DIR%gradle\wrapper\gradle-wrapper.jar" build
+  "%SCRIPT_DIR%gradlew.bat" build
 )
 
-"%JAVA%" -jar "%FAT_JAR%" %*
+rem Use Windows-native paths (override Linux defaults in settings.jsonc)
+set "NATIVE_DIR=%SCRIPT_DIR%deps\jbig2enc\win"
+set "TESSERACT_DIR=%SCRIPT_DIR%deps\tesseract\win"
+set "TESSDATA_DIR=%SCRIPT_DIR%deps\tesseract\tessdata"
+
+"%JAVA%" -jar "%FAT_JAR%" --native-dir "%NATIVE_DIR%" --tesseract-path "%TESSERACT_DIR%\tesseract.bat" --tessdata-dir "%TESSDATA_DIR%" %*

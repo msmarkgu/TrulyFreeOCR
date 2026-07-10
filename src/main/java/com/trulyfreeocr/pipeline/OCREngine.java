@@ -22,7 +22,7 @@ public class OCREngine {
     private final String psm;
 
     public OCREngine() {
-        this("tessdata", "native/linux/tesseract", "eng", "1");
+        this("deps/tesseract/tessdata", "deps/tesseract/linux/tesseract", "eng", "1");
     }
 
     public OCREngine(String tessdataDir, String tesseractPath, String language, String psm) {
