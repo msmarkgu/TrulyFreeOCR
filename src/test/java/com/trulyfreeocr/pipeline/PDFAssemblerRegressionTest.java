@@ -414,4 +414,66 @@ class PDFAssemblerRegressionTest {
                 foregroundMask.getWidth(), foregroundMask.getHeight(), false);
         }
     }
+
+    /**
+     * Verifies that PDF/A mode preserves source document metadata
+     * (author, title, subject) instead of overwriting it.
+     *
+     * Bug #3: addPdfaMetadata was setting a static XMP string that
+     * replaced any author/title/subject copied by MetadataPreserver.
+     */
+    @Test
+    void pdfaMode_preservesSourceMetadata() throws IOException {
+        File source = new File(tempDir, "source-with-meta.pdf");
+        String expectedAuthor = "Test Author";
+        String expectedTitle = "Test Title";
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            // Set explicit XMP metadata on the source (the path that gets
+            // copied by MetadataPreserver.copyXmlMetadata).
+            String sourceXmp = """
+                    <?xpacket begin="\\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                    <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                      <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                        <rdf:Description rdf:about=""
+                          xmlns:dc="http://purl.org/dc/elements/1.1/">
+                          <dc:creator><rdf:Seq><rdf:li>""" + expectedAuthor + """
+                </rdf:li></rdf:Seq></dc:creator>
+                          <dc:title><rdf:Alt><rdf:li xml:lang="x-default">""" + expectedTitle + """
+                </rdf:li></rdf:Alt></dc:title>
+                        </rdf:Description>
+                      </rdf:RDF>
+                    </x:xmpmeta>
+                    <?xpacket end="w"?>""";
+            var meta = new org.apache.pdfbox.pdmodel.common.PDMetadata(doc);
+            meta.importXMPMetadata(sourceXmp.getBytes(StandardCharsets.UTF_8));
+            doc.getDocumentCatalog().setMetadata(meta);
+            doc.save(source);
+        }
+
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("Meta", new Rectangle(10, 100, 120, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+
+        PDFAssembler assembler = new PDFAssembler();
+        try (PDDocument output = assembler.assemble(source, Collections.singletonList(bg),
+                null, Collections.singletonList(ocr), true)) {
+
+            var outMeta = output.getDocumentCatalog().getMetadata();
+            assertNotNull(outMeta, "PDF/A output should have XMP metadata");
+
+            String xmp;
+            try (InputStream is = outMeta.createInputStream()) {
+                xmp = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            assertTrue(xmp.contains(expectedAuthor),
+                    "XMP metadata should contain author: " + expectedAuthor);
+            assertTrue(xmp.contains(expectedTitle),
+                    "XMP metadata should contain title: " + expectedTitle);
+        }
+    }
 }
