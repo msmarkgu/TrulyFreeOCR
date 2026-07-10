@@ -1,7 +1,19 @@
 #!/bin/sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export JAVA_HOME="$SCRIPT_DIR/jdk"
+_JAVA_BIN="$SCRIPT_DIR/deps/jdk/bin/java"
+if [ -x "$_JAVA_BIN" ]; then
+  export JAVA_HOME="$SCRIPT_DIR/deps/jdk"
+  echo "Using JDK: $JAVA_HOME" >&2
+  # Stop stale daemon if JDK was replaced (stamp file check)
+  if [ "${1:-}" != "--stop" ]; then
+    STAMP="$SCRIPT_DIR/deps/jdk/.daemon_stopped"
+    if [ ! -f "$STAMP" ] || [ "$SCRIPT_DIR/deps/jdk/release" -nt "$STAMP" ]; then
+      "$SCRIPT_DIR/gradlew" --stop 2>/dev/null || true
+      touch "$STAMP"
+    fi
+  fi
+fi
 
 #
 # Copyright © 2015-2021 the original authors.

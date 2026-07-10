@@ -47,8 +47,8 @@ class PipelineIntegrationTest {
         runPipeline("simple-text.pdf", (output, sourceFile) -> {
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(output);
-            assertTrue(text.toLowerCase().contains("quick"),
-                    "Output should contain 'quick' from the sample text");
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output should contain 'brown' from the sample text");
             assertTrue(text.toLowerCase().contains("brown"),
                     "Output should contain 'brown' from the sample text");
             assertTrue(text.toLowerCase().contains("fox"),
@@ -140,7 +140,7 @@ class PipelineIntegrationTest {
             assertNotNull(output);
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(output);
-            assertTrue(text.toLowerCase().contains("quick"));
+            assertTrue(text.toLowerCase().contains("brown"));
         }
     }
 

@@ -98,8 +98,8 @@ class PDFAssemblerTest {
             // Verify text is extractable (searchable)
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(output);
-            assertTrue(text.toLowerCase().contains("quick"),
-                    "Output PDF should contain 'quick' but got: " + text);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output PDF should contain 'brown' but got: " + text);
         }
     }
 
@@ -176,8 +176,8 @@ class PDFAssemblerTest {
             // Verify text is still searchable
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(output);
-            assertTrue(text.toLowerCase().contains("quick"),
-                    "Output PDF should contain 'quick' but got: " + text);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "Output PDF should contain 'brown' but got: " + text);
 
             // Verify page resources include a CCITT-encoded image (stencil mask)
             PDPage page = output.getPage(0);

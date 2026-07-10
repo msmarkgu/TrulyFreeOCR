@@ -50,7 +50,7 @@ https://github.com/tesseract-ocr/tesseract
 Copyright (c) 2006-2024 Google Inc. and contributors
 Apache License 2.0
 
-### Tesseract Language Data (tessdata)
+### Tesseract Language Data (deps/tesseract/tessdata)
 https://github.com/tesseract-ocr/tessdata
 Copyright (c) 2024 Google Inc. and contributors
 Apache License 2.0

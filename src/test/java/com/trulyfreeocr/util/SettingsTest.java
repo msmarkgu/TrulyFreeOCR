@@ -43,8 +43,8 @@ class SettingsTest {
     @Test
     void parseJsonc_loadsActualFile() {
         Settings s = Settings.load();
-        assertEquals("./native/linux/tesseract", s.getString("tesseract.path", "DEFAULT"));
-        assertEquals("./tessdata", s.getString("tessdata.dir", "DEFAULT"));
+        assertEquals("./deps/tesseract/linux/tesseract", s.getString("tesseract.path", "DEFAULT"));
+        assertEquals("./deps/tesseract/tessdata", s.getString("tessdata.dir", "DEFAULT"));
         assertEquals(300, s.getInt("rendering.dpi", 0));
         assertEquals(0.95, s.getDouble("segmenter.percentile", 0), 1e-9);
         assertEquals(64, s.getInt("segmenter.tileSize", 0));

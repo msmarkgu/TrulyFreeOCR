@@ -34,6 +34,7 @@ application {
 }
 
 tasks.named<Test>("test") {
+    outputs.upToDateWhen { false }
     useJUnitPlatform {
         excludeTags("eval")
     }
@@ -55,10 +56,11 @@ tasks.named<Test>("test") {
         override fun beforeTest(desc: TestDescriptor) {}
         override fun afterTest(desc: TestDescriptor, result: TestResult) {}
     })
-    environment("TESSDATA_PREFIX", "${project.projectDir}/tessdata")
+    environment("TESSDATA_PREFIX", "${project.projectDir}/deps/tesseract/tessdata")
 }
 
 tasks.register<Test>("testEval") {
+    outputs.upToDateWhen { false }
     useJUnitPlatform {
         includeTags("eval")
     }
@@ -67,7 +69,7 @@ tasks.register<Test>("testEval") {
         showStandardStreams = true
     }
     maxHeapSize = "2g"
-    environment("TESSDATA_PREFIX", "${project.projectDir}/tessdata")
+    environment("TESSDATA_PREFIX", "${project.projectDir}/deps/tesseract/tessdata")
 }
 
 tasks.register<JavaExec>("generateCorpus") {

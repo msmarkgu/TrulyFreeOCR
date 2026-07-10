@@ -42,13 +42,13 @@ public class PlatformUtils {
      *
      * Checks in order:
      *   1. TFOCR_JAVA_HOME environment variable (set by run.sh/bootstrap.sh)
-     *   2. jdk/ directory in the project root (project-local install)
+     *   2. deps/jdk/ directory in the project root (project-local install)
      *   3. The JVM that is running this code (java.home system property)
      */
     public static String getProjectJavaHome() {
         String env = System.getenv("TFOCR_JAVA_HOME");
         if (env != null && !env.isEmpty()) return env;
-        File projectJdk = new File("jdk");
+        File projectJdk = new File("deps/jdk");
         if (projectJdk.isDirectory() && new File(projectJdk, "bin/java").canExecute()) {
             return projectJdk.getAbsolutePath();
         }

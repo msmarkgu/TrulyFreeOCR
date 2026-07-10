@@ -14,9 +14,10 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
   No GPL, no AGPL, no proprietary components — no obligation to open source your code.
 
 - **DevOps / Deployment engineers** — Every dependency (JDK, Tesseract, Leptonica,
-  jbig2enc, language data) downloads into project subdirectories via `bootstrap.sh`.
-  The entire stack is self-contained: copy the folder and it runs. No apt, brew,
-  or system-wide installs needed on the target machine.
+  jbig2enc, language data) downloads into project subdirectories via `bootstrap.sh`
+  (Linux/macOS) or `bootstrap.bat` (Windows). Zero admin rights required: no sudo,
+  no brew, no apt-get install, no Windows installer wizard.
+  The entire stack is self-contained: copy the folder and it runs on any machine.
 
 - **Document processing pipelines** — Headless CLI with JSONC settings file.
   All parameters (DPI, language, PSM, MRC on/off) are scriptable. The fat JAR
@@ -40,7 +41,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 A survey of 19 open-source OCR projects (see [`docs/similar-projects.md`](docs/similar-projects.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
-- **Self-contained** — single fat JAR + `bootstrap.sh`; no Python, no system deps
+- **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; no sudo, no Python, no system deps
 - **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project)
 - **Searchable PDF output** — invisible text layer + optional PDF/A-2b
 - **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine
@@ -62,44 +63,99 @@ TrulyFreeOCR fills the gap: no license worries, no data going to cloud, no need 
 
 ### Installation
 
+**No admin rights needed** — every dependency is downloaded into project
+subdirectories and stays there. The bootstrap script works on Linux, macOS,
+and Windows.
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/msmarkgu/TrulyFreeOCR.git
    cd TrulyFreeOCR
    ```
 
-2. Run the bootstrap script:
+2. Run the bootstrap script for your platform:
    ```bash
+   # Linux / macOS
    ./bootstrap.sh
+
+   # Windows (PowerShell or Command Prompt)
+   bootstrap.bat
    ```
-   This will install:
-   - OpenJDK 21 LTS
-   - Tesseract OCR engine
-   - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn)
-   - jbig2enc for JBIG2 compression
-   - All required native libraries
+   This will install into local project subdirectories:
+   - OpenJDK 21 LTS → `deps/jdk/`
+   - Tesseract OCR engine → `deps/tesseract/$OS/`
+   - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn, osd) → `deps/tesseract/tessdata/`
+   - jbig2enc for JBIG2 compression → `deps/jbig2enc/$OS/`
+   - All required shared libraries → `deps/tesseract/$OS/lib/` and `deps/jbig2enc/$OS/lib/`
+
+<details>
+<summary>Resulting <code>deps/</code> structure (Linux shown; macOS/Windows analogous)</summary>
+
+```
+deps/
+├── jdk/
+│   ├── bin/            # java, javac, jar, ...
+│   ├── lib/            # rt, modules, security, ...
+│   └── ...
+├── tesseract/
+│   ├── linux/
+│   │   ├── tesseract       # wrapper script (sets TESSDATA_PREFIX, LD_LIBRARY_PATH)
+│   │   ├── tesseract.bin   # Tesseract OCR engine
+│   │   └── lib/
+│   │       ├── libtesseract.so.5 -> libtesseract.so.5.0.3
+│   │       ├── libtesseract.so.5.0.3
+│   │       ├── liblept.so -> liblept.so.5
+│   │       ├── liblept.so.5 -> liblept.so.5.0.4
+│   │       └── liblept.so.5.0.4
+│   └── tessdata/
+│       ├── eng.traineddata
+│       ├── fra.traineddata
+│       ├── deu.traineddata
+│       ├── spa.traineddata
+│       ├── chi_sim.traineddata
+│       ├── chi_tra.traineddata
+│       ├── jpn.traineddata
+│       ├── osd.traineddata
+│       └── configs/
+│           └── tsv
+└── jbig2enc/
+    └── linux/
+        ├── jbig2enc        # wrapper script (sets LD_LIBRARY_PATH)
+        ├── jbig2.bin       # jbig2enc CLI (from Ubuntu jbig2 package)
+        └── lib/
+            ├── libjbig2enc.so.0 -> libjbig2enc.so.0.0.28
+            ├── libjbig2enc.so.0.0.28
+            ├── liblept.so -> liblept.so.5
+            ├── liblept.so.5 -> liblept.so.5.0.4
+            └── liblept.so.5.0.4
+```
+Leptonica (`liblept`) is shared: the canonical copy lives under `tesseract/$OS/lib/`,
+and a copy is also placed under `jbig2enc/$OS/lib/` for the jbig2enc wrapper's
+`LD_LIBRARY_PATH` to find at runtime.
+</details>
 
 3. To force re-download all dependencies:
    ```bash
-   ./bootstrap.sh --force
+   ./bootstrap.sh --force       # Linux / macOS
+   bootstrap.bat --force        # Windows
    ```
 
 ### Verification
 
-After running `bootstrap.sh`, verify all dependencies were installed:
+After running the bootstrap script, verify all dependencies were installed:
 
 ```bash
 # Check JDK
-./jdk/linux/bin/java -version
+./deps/jdk/bin/java -version
 
-# Check Tesseract
-./native/linux/tesseract --version
+# Check Tesseract wrapper
+./deps/tesseract/*/tesseract --version
 
-# Check jbig2enc
-ls -l ./native/linux/jbig2enc
+# Check jbig2enc (Linux/macOS only; Windows uses CCITT G4 fallback)
+ls -l ./deps/jbig2enc/*/jbig2 2>/dev/null || echo "jbig2enc not available (CCITT G4 fallback active)"
 
 # Check language data
-ls ./tessdata/*.traineddata
+ls ./deps/tesseract/tessdata/*.traineddata
 ```
 
 If these files and binaries exist, the installation is complete.
@@ -130,6 +186,10 @@ For more options, run:
 ```bash
 java -jar build/libs/trulyfreeocr.jar --help
 ```
+
+See [`docs/test-runs.md`](docs/test-runs.md) for example benchmark runs with
+real command lines showing `--threads`, `--no-mrc`, and MRC-enabled output
+with timing and file-size results.
 
 CLI flags override `settings.jsonc` values, which override hardcoded defaults.
 
@@ -194,9 +254,9 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 
 | Setting | Default | Description |
 |---|---|---|
-| `native.dir` | `./native` | Native binaries directory (jbig2enc, etc.) |
-| `tessdata.dir` | `./tessdata` | Tesseract language data directory |
-| `tesseract.path` | `./native/linux/tesseract` | Tesseract executable (project-local wrapper) |
+| `native.dir` | `./deps/jbig2enc` | Native binaries directory (jbig2enc, etc.) |
+| `tessdata.dir` | `./deps/tesseract/tessdata` | Tesseract language data directory |
+| `tesseract.path` | `./deps/tesseract/linux/tesseract` | Tesseract executable (project-local wrapper) |
 | `tesseract.language` | `eng` | Tesseract language model |
 | `tesseract.psm` | `1` | Page segmentation mode |
 | `pipeline.mrc.enabled` | `true` | Enable MRC compression (background + foreground mask + text) |
@@ -295,17 +355,18 @@ distributed with the application.
 ### Native / Bundled
 
 All native dependencies are installed in project subdirectories and gitignored.
-The `bootstrap.sh` script handles setting them up from scratch.
+The `bootstrap.sh` / `bootstrap.bat` script handles setting them up from scratch
+with no admin rights required.
 
 | Dependency | Project Location | License | Project |
 |---|---|---|---|
-| OpenJDK 21 LTS | `jdk/` | GPL 2.0 + Classpath Exception | https://adoptium.net |
-| Tesseract OCR | `native/$OS/tesseract` (system install symlink) + `native/$OS/lib/libtesseract.so.5` | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
-| Leptonica | `native/$OS/lib/liblept.so.5` | BSD 2-Clause | https://github.com/DanBloomberg/leptonica |
-| jbig2enc | `native/$OS/jbig2enc` (precompiled binary) | Apache 2.0 | https://github.com/agl/jbig2enc |
-| Tesseract language data | `tessdata/*.traineddata` (eng, fra, spa, deu, chi_sim, chi_tra, jpn) | Apache 2.0 | https://github.com/tesseract-ocr/tessdata |
+| OpenJDK 21 LTS | `deps/jdk/` | GPL 2.0 + Classpath Exception | https://adoptium.net |
+| Tesseract OCR | `deps/tesseract/$OS/` (binary + libs) | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
+| Leptonica | `deps/tesseract/$OS/lib/liblept.so.5`, also copied to `deps/jbig2enc/$OS/lib/` | BSD 2-Clause | https://github.com/DanBloomberg/leptonica |
+| jbig2enc | `deps/jbig2enc/$OS/` (binary + lib) | Apache 2.0 | https://github.com/agl/jbig2enc |
+| Tesseract language data | `deps/tesseract/tessdata/*.traineddata` (eng, fra, spa, deu, chi_sim, chi_tra, jpn, osd) | Apache 2.0 | https://github.com/tesseract-ocr/tessdata |
 
-Binary wrappers in `native/$OS/` set `LD_LIBRARY_PATH` to `native/$OS/lib/` so
+Binary wrappers in `deps/tesseract/$OS/` and `deps/jbig2enc/$OS/` set `LD_LIBRARY_PATH` so
 the project-local shared libraries are used instead of system-wide ones.
 
 ---

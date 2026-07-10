@@ -1,18 +1,19 @@
 {
     // ===== Paths =====
-    // Directory containing native binaries (jbig2enc, etc.).
+    // Directory containing the jbig2enc binary.
     // Override via --native-dir CLI flag.
-    "native.dir": "./native",
+    "native.dir": "./deps/jbig2enc",
 
     // Directory containing Tesseract language data (*.traineddata).
     // Override via --tessdata-dir CLI flag or TESSDATA_PREFIX env var.
-    "tessdata.dir": "./tessdata",
+    "tessdata.dir": "./deps/tesseract/tessdata",
 
     // Path to the Tesseract executable.
-    // Default points to the project-local wrapper in native/linux/,
-    // which sets TESSDATA_PREFIX to ./tessdata/ before delegating to
-    // the system Tesseract.  Fallback: "tesseract" (on PATH).
-    "tesseract.path": "./native/linux/tesseract",
+    // Points to the project-local wrapper in deps/tesseract/,
+    // which sets TESSDATA_PREFIX to ./deps/tesseract/tessdata/ before
+    // delegating to the project-local tesseract binary.
+    // Fallback: "tesseract" (on PATH).
+    "tesseract.path": "./deps/tesseract/linux/tesseract",
 
     // ===== Tesseract Languages =====
     // Available languages (traineddata in tessdata/). Only those marked

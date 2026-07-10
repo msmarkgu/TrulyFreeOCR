@@ -13,14 +13,8 @@ gradle/wrapper/gradle-wrapper.jar
 .DS_Store
 Thumbs.db
 
-# Native binaries (downloaded by bootstrap)
-native/
-
-# JDK (downloaded by bootstrap)
-jdk/
-
-# Tesseract data (downloaded by bootstrap)
-tessdata/
+# Downloaded dependencies (JDK, Tesseract, language data, jbig2enc)
+deps/
 
 # Tools (bundled tesseract wrapper, system tool symlinks)
 tools/
