@@ -41,7 +41,7 @@ public class EvalOcrRunner {
         String[] parts = s.split("\\s+");
         List<String> out = new ArrayList<String>(parts.length);
         for (String p : parts) {
-            String clean = p.replaceAll("[^a-z0-9]", "");
+            String clean = p.replaceAll("[^\\p{L}\\p{N}]", ""); // \\p{L}=any Unicode letter, \\p{N}=any Unicode digit
             if (!clean.isEmpty()) out.add(clean);
         }
         return out;
