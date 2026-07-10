@@ -49,7 +49,8 @@ public class PlatformUtils {
         String env = System.getenv("TFOCR_JAVA_HOME");
         if (env != null && !env.isEmpty()) return env;
         File projectJdk = new File("deps/jdk");
-        if (projectJdk.isDirectory() && new File(projectJdk, "bin/java").canExecute()) {
+        String javaExe = detectOs() == Os.WINDOWS ? "bin/java.exe" : "bin/java";
+        if (projectJdk.isDirectory() && new File(projectJdk, javaExe).canExecute()) {
             return projectJdk.getAbsolutePath();
         }
         return System.getProperty("java.home");
