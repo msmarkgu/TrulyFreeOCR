@@ -50,7 +50,8 @@ class PDFAssemblerTest {
     }
 
     private static List<PageResult> ocrPages(OCREngine engine, List<BufferedImage> pages) throws IOException {
-        Path tempDir = Files.createTempDirectory("tfocr-test-");
+        Files.createDirectories(Path.of("temp"));
+        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
         try {
             for (int i = 0; i < pages.size(); i++) {
                 BufferedImage page = pages.get(i);

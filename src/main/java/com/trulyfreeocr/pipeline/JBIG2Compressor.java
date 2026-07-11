@@ -4,6 +4,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -196,7 +197,8 @@ public class JBIG2Compressor {
      * jbig2enc produces.
      */
     private CompressionResult compressWithJbig2enc(File jbig2enc, BufferedImage mask) throws IOException {
-        File tempBmp = File.createTempFile("tfocr-jbig2-", ".bmp");
+        Files.createDirectories(Path.of("temp"));
+        File tempBmp = Files.createTempFile(Path.of("temp"), "tfocr-jbig2-", ".bmp").toFile();
         tempBmp.deleteOnExit();
         javax.imageio.ImageIO.write(mask, "bmp", tempBmp);
 
