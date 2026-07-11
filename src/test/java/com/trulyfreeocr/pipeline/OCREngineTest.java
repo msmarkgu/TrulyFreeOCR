@@ -56,7 +56,7 @@ class OCREngineTest {
 
     @Test
     void ocr_simpleText_returnsWordBlocks() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/simple-text.pdf"));
         var result = ocrPage(engine, pages, 0);
         assertNotNull(result);
         assertNotNull(result.getTextBlocks());
@@ -65,7 +65,7 @@ class OCREngineTest {
 
     @Test
     void ocr_simpleText_containsExpectedWord() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/simple-text.pdf"));
         var result = ocrPage(engine, pages, 0);
         var words = result.getTextBlocks().stream()
                 .map(tb -> tb.getWord().toLowerCase())
@@ -76,7 +76,7 @@ class OCREngineTest {
 
     @Test
     void ocr_simpleText_allBlocksHavePositiveConfidence() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/simple-text.pdf"));
         var result = ocrPage(engine, pages, 0);
         for (var tb : result.getTextBlocks()) {
             assertTrue(tb.getConfidence() >= 0,
@@ -86,7 +86,7 @@ class OCREngineTest {
 
     @Test
     void ocr_blankPage_returnsEmptyBlocks() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/blank.pdf"));
+        var pages = extractor.extractPages(new File("tests/blank.pdf"));
         var result = ocrPage(engine, pages, 0);
         assertNotNull(result);
         assertTrue(result.getTextBlocks().isEmpty());
@@ -94,14 +94,14 @@ class OCREngineTest {
 
     @Test
     void ocr_blankPage_returnsCorrectPageNumber() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/blank.pdf"));
+        var pages = extractor.extractPages(new File("tests/blank.pdf"));
         var result = ocrPage(engine, pages, 0);
         assertEquals(1, result.getPageNumber());
     }
 
     @Test
     void ocr_simpleText_blocksHaveBoundingBoxes() throws IOException {
-        var pages = extractor.extractPages(new File("tests/test-files/generated/simple-text.pdf"));
+        var pages = extractor.extractPages(new File("tests/simple-text.pdf"));
         var result = ocrPage(engine, pages, 0);
         for (var tb : result.getTextBlocks()) {
             assertNotNull(tb.getBbox());

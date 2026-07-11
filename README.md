@@ -183,27 +183,27 @@ Build the fat JAR:
 
 Basic usage (recommended — auto-builds, uses local JDK):
 ```bash
-./run.sh tests/test-files/generated/simple-text.pdf -o output.pdf
+./run.sh tests/simple-text.pdf -o output.pdf
 ```
 
 If you prefer to invoke the JAR directly with the project-local JDK:
 ```bash
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf -o output.pdf
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf -o output.pdf
 ```
 
 Common options:
 ```bash
 # Set DPI (default: 300)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --dpi 300
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --dpi 300
 
 # Set language (default: eng)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --language spa
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --language spa
 
 # Disable MRC compression
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --no-mrc
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --no-mrc
 
 # Use 2 concurrent OCR threads (default: 1)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --threads 2
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --threads 2
 ```
 
 For more options, run:

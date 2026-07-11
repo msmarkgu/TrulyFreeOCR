@@ -90,7 +90,7 @@ class PipelineIntegrationTest {
 
     @Test
     void fullPipeline_withAnnotations_preservesMetadata() throws IOException {
-        File input = new File("tests/test-files/generated/with-annotations.pdf");
+        File input = new File("tests/with-annotations.pdf");
         var pages = extractor.extractPages(input);
         var segmented = pages.stream().map(segmenter::segment).toList();
         var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
@@ -129,7 +129,7 @@ class PipelineIntegrationTest {
 
     @Test
     void fullPipeline_simpleText_withForegroundMask() throws IOException {
-        File input = new File("tests/test-files/generated/simple-text.pdf");
+        File input = new File("tests/simple-text.pdf");
         var pages = extractor.extractPages(input);
         var segmented = pages.stream().map(segmenter::segment).toList();
         var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
@@ -146,7 +146,7 @@ class PipelineIntegrationTest {
 
     @Test
     void fullPipeline_outputFileSizeIsReasonable() throws IOException {
-        File input = new File("tests/test-files/generated/simple-text.pdf");
+        File input = new File("tests/simple-text.pdf");
         var pages = extractor.extractPages(input);
         var segmented = pages.stream().map(segmenter::segment).toList();
         var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
@@ -174,7 +174,7 @@ class PipelineIntegrationTest {
     }
 
     private void runPipeline(String testPdfName, OutputValidator validator) throws IOException {
-        File input = new File("tests/test-files/generated/" + testPdfName);
+        File input = new File("tests/" + testPdfName);
         assertTrue(input.exists(), "Test PDF not found: " + input);
 
         var pages = extractor.extractPages(input);
