@@ -1,4 +1,4 @@
-# Similar Projects Comparison
+# Comparison of Open-Source OCR Tools
 
 ## Overview
 
@@ -44,18 +44,18 @@ self-contained deployment, and Java portability.
 
 ## Project Matrix — DL OCR Toolkits & Desktop Tools
 
-| Feature | EasyOCR | surya | docTR | RapidOCR | Umi-OCR | PandaOCR | SwiftOCR | llama_index |
-|---|---|---|---|---|---|---|---|---|
-| **Language** | Python | Python | Python | Python / C++ / Java / C# | Python + QML | AutoIt / Pascal | Swift | Python / TypeScript |
-| **License** | Apache 2.0 | Apache 2.0 (code), OpenRAIL-M (weights) | Apache 2.0 | Apache 2.0 | MIT | Custom freeware | Apache 2.0 | MIT |
-| **GitHub Stars** | ~30k | ~30k | ~6k | ~7k | ~46k | ~5k | ~5k | ~50k |
-| **OCR Engine** | CRAFT + CRNN (PyTorch) | Own VLM (650M) | DBNet + CRNN / ViT | PaddleOCR → ONNX | PaddleOCR / RapidOCR | Cloud API aggregator | NN (Swift) | LlamaParse (cloud) |
-| **MRC Compression** | No | No | No | No | Basic (dual-layer PDF) | No | No | No |
-| **Self-Contained** | No (Python + PyTorch) | No (Python + GPU) | No (Python + PyTorch) | No (Python) | Yes (Windows exe + runtime) | Yes (Windows exe) | Yes (Swift pkg) | No (Python / cloud API) |
-| **PDF/A** | No | No | No | No | No | No | No | No |
-| **Searchable PDF** | No | No | No | No | Yes (basic dual-layer) | No | No | No |
-| **Concurrent OCR** | Yes (GPU batch) | Yes (GPU batch) | Yes (GPU batch) | Yes | Yes | N/A (sequential) | No | Yes (cloud) |
-| **Active Development** | Moderate (v1.7.2) | Yes (v0.20.0) | Moderate | Yes (v3.9.0) | Yes (v2.1.5) | Yes (Pro v5.59) | Deprecated (2020) | Yes (weekly) |
+| Feature | EasyOCR | surya | docTR | RapidOCR | Umi-OCR | NAPS2 | PandaOCR | SwiftOCR | llama_index |
+|---|---|---|---|---|---|---|---|---|---|
+| **Language** | Python | Python | Python | Python / C++ / Java / C# | Python + QML | C# (.NET) | AutoIt / Pascal | Swift | Python / TypeScript |
+| **License** | Apache 2.0 | Apache 2.0 (code), OpenRAIL-M (weights) | Apache 2.0 | Apache 2.0 | MIT | GPL 2.0 | Custom freeware | Apache 2.0 | MIT |
+| **GitHub Stars** | ~30k | ~30k | ~6k | ~7k | ~46k | ~4.3k | ~5k | ~5k | ~50k |
+| **OCR Engine** | CRAFT + CRNN (PyTorch) | Own VLM (650M) | DBNet + CRNN / ViT | PaddleOCR → ONNX | PaddleOCR / RapidOCR | Tesseract | Cloud API aggregator | NN (Swift) | LlamaParse (cloud) |
+| **MRC Compression** | No | No | No | No | Basic (dual-layer PDF) | No | No | No | No |
+| **Self-Contained** | No (Python + PyTorch) | No (Python + GPU) | No (Python + PyTorch) | No (Python) | Yes (exe + runtime) | Portable archive | Yes (Windows exe) | Yes (Swift pkg) | No (Python / cloud API) |
+| **PDF/A** | No | No | No | No | No | No | No | No | No |
+| **Searchable PDF** | No | No | No | No | Yes (basic dual-layer) | Yes (via OCR) | No | No | No |
+| **Concurrent OCR** | Yes (GPU batch) | Yes (GPU batch) | Yes (GPU batch) | Yes | Yes | No | N/A (sequential) | No | Yes (cloud) |
+| **Active Development** | Moderate (v1.7.2) | Yes (v0.20.0) | Moderate | Yes (v3.9.0) | Yes (v2.1.5) | Yes (v8.2.1) | Yes (Pro v5.59) | Deprecated (2020) | Yes (weekly) |
 
 ---
 
@@ -268,6 +268,26 @@ self-contained deployment, and Java portability.
 - **Relevance**: Umi-OCR is the most comparable tool for *desktop* searchable
   PDF creation.  Its dual-layer PDF output proves demand for this feature.
   Our tool targets the server/enterprise space where Umi-OCR cannot operate.
+
+### NAPS2 (cyanfish/naps2)
+- **License**: GPL 2.0 — strong copyleft, incompatible with commercial
+  integration without disclosing the entire application source.  SDK modules
+  are LGPL 2.1, which permits library-style linking.
+- **Strengths**: Best-in-class scanner driver support (WIA, TWAIN, SANE, ESCL).
+  Clean desktop GUI across Windows, Mac, and Linux.  CLI and .NET SDK for
+  automation and integration.  40+ language translations.  Scanner sharing over
+  network.  Active development (8+ years, 4,400+ commits, 4.3k stars).
+  Portable archive available (no installer needed).
+- **Weaknesses**: GPL 2.0 restricts commercial embedding.  Desktop GUI app —
+  not designed for headless server/automation batch processing.  No MRC
+  compression.  No PDF/A.  Requires .NET runtime (not self-contained in the
+  same sense as a single fat JAR).  OCR (via Tesseract) is a secondary feature
+  — scanning is the primary focus.
+- **Relevance**: NAPS2 is the most polished open-source scanner application
+  with OCR capability, but it serves a fundamentally different use case —
+  interactive scanning, not automated PDF batch processing.  TrulyFreeOCR
+  complements NAPS2 in the server/automation space where headless operation,
+  MRC compression, and PDF/A compliance are required.
 
 ### PandaOCR (miaomiaosoft/PandaOCR / PandaOCR.Pro)
 - **License**: Custom freeware — not open source (source code not provided on
