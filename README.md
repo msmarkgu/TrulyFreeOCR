@@ -55,7 +55,7 @@ Where other tools fall short:
 - **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
 - **[surya](https://github.com/VikParuchuri/surya) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
 
-TrulyFreeOCR fills the gap: no license worries, no data going to cloud, no need gpu — you only need to run the fat jar, input a PDF, get a searchable PDF out.
+TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and no GPU required. Simply run the self-contained fat JAR, input a PDF, and get a highly compressed, fully searchable PDF out.
 
 ---
 
