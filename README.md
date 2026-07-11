@@ -38,7 +38,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 ## Why TrulyFreeOCR
 
-A survey of 19 open-source OCR projects (see [`docs/similar-projects.md`](docs/similar-projects.md)) found none that combine all five requirements for production document processing:
+A survey of 20 open-source OCR projects (see [`docs/opensource-ocr-tools.md`](docs/opensource-ocr-tools.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
 - **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local; no sudo, no Python, no system deps
@@ -51,6 +51,7 @@ Where other tools fall short:
 - **VLM models** ([DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [GLM-OCR](https://github.com/zai-org/GLM-OCR), [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), etc.) produce the best OCR accuracy but require GPUs and only emit JSON/Markdown — no PDF output at all.
 - **[OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF)** covers the full PDF pipeline but needs Ghostscript + Python + system deps; its MPL-2.0 license requires publishing modifications.
 - **[Umi-OCR](https://github.com/hiroi-sora/Umi-OCR)** makes a nice desktop GUI but has no MRC compression, no PDF/A, and is Windows-focused.
+- **[NAPS2](https://github.com/cyanfish/naps2)** is a desktop scanning app with OCR, but uses GPL 2.0, requires .NET runtime, and has no MRC compression, no PDF/A, no headless server mode.
 - **[LlamaParse](https://github.com/run-llama/llama_index)** (LlamaIndex) is a cloud API with per-page costs, no offline mode, and no MRC/PDF/A output.
 - **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
 - **[surya](https://github.com/VikParuchuri/surya) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
@@ -371,7 +372,7 @@ The `bootstrap.sh` / `bootstrap.bat` script handles setting them up from scratch
 with no admin rights required.
 
 | Dependency | Project Location | License | Project |
-|---|---|---|---|---|
+|---|---|---|---|
 | OpenJDK 21 LTS | `deps/jdk/` | GPL 2.0 + Classpath Exception | https://adoptium.net |
 | Gradle 8.0.1 | `deps/gradle/` | Apache 2.0 | https://gradle.org |
 | Tesseract OCR | `deps/tesseract/$OS/` (binary + libs) | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
@@ -408,3 +409,7 @@ the project-local shared libraries are used instead of system-wide ones.
 ## License
 
 TrulyFreeOCR itself is made available under the Apache 2.0 License. All dependencies listed above use permissive open-source licenses compatible with commercial use. A full `NOTICE.md` with copyright attributions is included in the repository.
+
+## Acknowledgements
+
+This project was developed with the assistance of multiple AI coding models like [DeepSeek](https://deepseek.com) and [Gemini](https://gemini.google.com), and AI coding tools including [OpenCode](https://opencode.ai) and [Antigravity](https://github.com/antigravity).
