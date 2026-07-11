@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import javax.imageio.ImageIO;
 
@@ -93,7 +95,7 @@ class JBIG2CompressorTest {
     void compressAllFromDir_returnsNullWhenJbig2encMissing() throws IOException {
         JBIG2Compressor missing = new JBIG2Compressor("/nonexistent");
         JBIG2Compressor.BatchResult result = missing.compressAllFromDir(
-            new File(System.getProperty("java.io.tmpdir")), 2,
+            new File("temp"), 2,
             new int[]{100, 100}, new int[]{100, 100});
         assertNull(result, "Should return null when jbig2enc not found");
     }
@@ -110,7 +112,8 @@ class JBIG2CompressorTest {
         JBIG2Compressor realCompressor = new JBIG2Compressor();
 
         // Probe availability by running on a single mask
-        File probeDir = new File(System.getProperty("java.io.tmpdir"), "tfocr-jbig2-probe-"
+        Files.createDirectories(Path.of("temp"));
+        File probeDir = new File("temp", "tfocr-jbig2-probe-"
             + System.nanoTime());
         probeDir.mkdirs();
         BufferedImage probe = new BufferedImage(50, 50, BufferedImage.TYPE_BYTE_BINARY);
@@ -126,7 +129,7 @@ class JBIG2CompressorTest {
         }
 
         // Create two masks with different text patterns
-        File maskDir = new File(System.getProperty("java.io.tmpdir"), "tfocr-jbig2-test-"
+        File maskDir = new File("temp", "tfocr-jbig2-test-"
             + System.nanoTime());
         maskDir.mkdirs();
         try {
@@ -171,7 +174,8 @@ class JBIG2CompressorTest {
         JBIG2Compressor realCompressor = new JBIG2Compressor();
 
         // Probe availability
-        File probeDir = new File(System.getProperty("java.io.tmpdir"), "tfocr-jbig2-probe-"
+        Files.createDirectories(Path.of("temp"));
+        File probeDir = new File("temp", "tfocr-jbig2-probe-"
             + System.nanoTime());
         probeDir.mkdirs();
         BufferedImage probe = new BufferedImage(50, 50, BufferedImage.TYPE_BYTE_BINARY);
@@ -187,7 +191,7 @@ class JBIG2CompressorTest {
         }
 
         // Different page sizes: page 0 = 100x200, page 1 = 150x250
-        File maskDir = new File(System.getProperty("java.io.tmpdir"), "tfocr-jbig2-mixed-"
+        File maskDir = new File("temp", "tfocr-jbig2-mixed-"
             + System.nanoTime());
         maskDir.mkdirs();
         try {

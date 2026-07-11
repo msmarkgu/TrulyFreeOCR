@@ -37,7 +37,31 @@ if not defined JAVA_EXE (
   echo OpenJDK already present
 )
 
-rem ── 2. Download Tesseract language data ───────────────────────────────
+rem ── 2. Download Gradle 8.0.1 ───────────────────────────────────────────
+set "GRADLE_DIR=%SCRIPT_DIR%deps\gradle"
+set "GRADLE_VERSION=8.0.1"
+if "%FORCE_DOWNLOAD%"=="true" (
+  if exist "%GRADLE_DIR%" rmdir /S /Q "%GRADLE_DIR%" 2>nul
+)
+if not exist "%GRADLE_DIR%\bin\gradle.bat" (
+  echo Downloading Gradle %GRADLE_VERSION% for Windows...
+  if not exist "%GRADLE_DIR%" mkdir "%GRADLE_DIR%"
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://services.gradle.org/distributions/gradle-%GRADLE_VERSION%-bin.zip' -OutFile '%SCRIPT_DIR%gradle-bin.zip'"
+  powershell -NoProfile -Command "Expand-Archive -Path '%SCRIPT_DIR%gradle-bin.zip' -DestinationPath '%SCRIPT_DIR%deps'"
+  del "%SCRIPT_DIR%gradle-bin.zip"
+  rem Flatten versioned folder
+  for /d %%d in ("%SCRIPT_DIR%deps\gradle-%GRADLE_VERSION%") do (
+    if exist "%%d" (
+      xcopy /E /Y "%%d\*" "%GRADLE_DIR%\" >nul
+      rmdir /S /Q "%%d"
+    )
+  )
+  if exist "%GRADLE_DIR%\bin\gradle.bat" echo Gradle %GRADLE_VERSION% downloaded to %GRADLE_DIR%
+) else (
+  echo Gradle already present
+)
+
+rem ── 3. Download Tesseract language data ───────────────────────────────
 set "TESSDATA_DIR=%SCRIPT_DIR%deps\tesseract\tessdata"
 if not exist "%TESSDATA_DIR%" mkdir "%TESSDATA_DIR%"
 
@@ -51,7 +75,14 @@ for %%l in (eng fra deu spa chi_sim chi_tra jpn osd) do (
 )
 echo Tessdata downloaded to %TESSDATA_DIR%
 
-rem ── 3. Download Tesseract for Windows ─────────────────────────────────
+rem Create Tesseract TSV config file (required for OCR output)
+if not exist "%TESSDATA_DIR%\configs" mkdir "%TESSDATA_DIR%\configs"
+if not exist "%TESSDATA_DIR%\configs\tsv" (
+  echo tessedit_create_tsv 1> "%TESSDATA_DIR%\configs\tsv"
+  echo Created tessdata/configs/tsv
+)
+
+rem ── 4. Download Tesseract for Windows ─────────────────────────────────
 set "TESSERACT_DIR=%SCRIPT_DIR%deps\tesseract\win"
 if not exist "%TESSERACT_DIR%" mkdir "%TESSERACT_DIR%"
 
@@ -73,7 +104,7 @@ if not exist "%TESSERACT_DIR%\tesseract.exe" (
 rem Ensure lib directory exists for DLLs
 if not exist "%TESSERACT_DIR%\lib" mkdir "%TESSERACT_DIR%\lib"
 
-rem ── 4. jbig2enc — not available as precompiled Windows binary ──────────
+rem ── 5. jbig2enc — not available as precompiled Windows binary ──────────
 rem JBIG2 compression will be unavailable; CCITT G4 fallback is used.
 set "JBIG2ENC_DIR=%SCRIPT_DIR%deps\jbig2enc\win"
 if not exist "%JBIG2ENC_DIR%" mkdir "%JBIG2ENC_DIR%"
@@ -82,7 +113,7 @@ if not exist "%JBIG2ENC_DIR%\jbig2enc.exe" (
   echo       JBIG2 compression disabled; using CCITT G4 fallback.
 )
 
-rem ── 5. Create tesseract wrapper batch ──────────────────────────────────
+rem ── 6. Create tesseract wrapper batch ──────────────────────────────────
 rem The wrapper sets TESSDATA_PREFIX and adds dependencies to PATH
 rem before delegating to the portable tesseract.exe.
 if not exist "%TESSERACT_DIR%\tesseract.bat" (
@@ -96,12 +127,10 @@ if not exist "%TESSERACT_DIR%\tesseract.bat" (
   echo Created tesseract wrapper at %TESSERACT_DIR%\tesseract.bat
 )
 
-rem ── 6. Done ───────────────────────────────────────────────────────────
+rem ── 7. Done ───────────────────────────────────────────────────────────
 echo.
 echo Bootstrap complete
 echo Run:  run.bat input.pdf -o output.pdf
-if defined JAVA_EXE (
-  echo Build: !JAVA_EXE! -jar gradle\wrapper\gradle-wrapper.jar build
-)
+echo Build: gradlew build
 
 endlocal

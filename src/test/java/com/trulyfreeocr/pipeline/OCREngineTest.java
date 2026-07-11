@@ -29,7 +29,8 @@ class OCREngineTest {
     }
 
     private static PageResult ocrPage(OCREngine engine, List<BufferedImage> pages, int pageIndex) throws IOException {
-        Path tempDir = Files.createTempDirectory("tfocr-test-");
+        Files.createDirectories(Path.of("temp"));
+        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
         try {
             for (int i = 0; i < pages.size(); i++) {
                 BufferedImage page = pages.get(i);

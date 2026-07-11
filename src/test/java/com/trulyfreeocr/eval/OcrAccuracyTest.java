@@ -56,7 +56,8 @@ class OcrAccuracyTest {
     }
 
     private void evaluateDocument(File pdf, GroundTruth gt) throws IOException {
-        Path tempDir = Files.createTempDirectory("tfocr-eval-");
+        Files.createDirectories(Path.of("temp"));
+        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-eval-");
         long totalStart = System.currentTimeMillis();
 
         try (PageExtractor pe = new PageExtractor()) {
