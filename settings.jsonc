@@ -124,6 +124,11 @@
     // Minimum font size (pt) to prevent zero-size fonts.
     "pdf.minFontSize": 1,
 
+    // Producer string for the output PDF metadata.
+    // If the input PDF has a Producer, the output will be "<input> -> <producer>".
+    // If the input has no Producer, the output will be the string below.
+    "pdf.producer": "TrulyFreeOCR",
+
     // ===== Output =====
     // Default output PDF path.
     // Override via -o / --output CLI flag.
