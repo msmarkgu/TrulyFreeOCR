@@ -114,6 +114,13 @@ for lang in $LANGUAGES; do
 done
 echo "Tessdata downloaded to $TESSDATA_DIR (${LANGUAGES})"
 
+# Create Tesseract TSV config file (required for OCR output)
+mkdir -p "$TESSDATA_DIR/configs"
+if [ ! -f "$TESSDATA_DIR/configs/tsv" ]; then
+  echo "tessedit_create_tsv 1" > "$TESSDATA_DIR/configs/tsv"
+  echo "Created tessdata/configs/tsv"
+fi
+
 # ── 5. Download Tesseract + jbig2enc project-local binaries ────────────
 TESSERACT_DIR="$SCRIPT_DIR/deps/tesseract/$OS"
 JBIG2ENC_DIR="$SCRIPT_DIR/deps/jbig2enc/$OS"

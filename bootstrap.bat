@@ -75,6 +75,13 @@ for %%l in (eng fra deu spa chi_sim chi_tra jpn osd) do (
 )
 echo Tessdata downloaded to %TESSDATA_DIR%
 
+rem Create Tesseract TSV config file (required for OCR output)
+if not exist "%TESSDATA_DIR%\configs" mkdir "%TESSDATA_DIR%\configs"
+if not exist "%TESSDATA_DIR%\configs\tsv" (
+  echo tessedit_create_tsv 1> "%TESSDATA_DIR%\configs\tsv"
+  echo Created tessdata/configs/tsv
+)
+
 rem ── 4. Download Tesseract for Windows ─────────────────────────────────
 set "TESSERACT_DIR=%SCRIPT_DIR%deps\tesseract\win"
 if not exist "%TESSERACT_DIR%" mkdir "%TESSERACT_DIR%"
