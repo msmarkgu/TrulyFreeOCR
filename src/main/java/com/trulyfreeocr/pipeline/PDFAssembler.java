@@ -30,6 +30,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
@@ -87,6 +88,7 @@ public class PDFAssembler {
     private JBIG2Compressor compressor;
     private double backgroundScale;
     private float bgSmoothSigma;
+    private String producer;
 
     public PDFAssembler() {
         this("HELVETICA", 1f);
@@ -119,6 +121,10 @@ public class PDFAssembler {
 
     public void setBgSmoothSigma(float sigma) {
         this.bgSmoothSigma = Math.max(0f, sigma);
+    }
+
+    public void setProducer(String producer) {
+        this.producer = producer;
     }
 
     private PDImageXObject encodeBackgroundJpeg(PDDocument doc, BufferedImage image, float quality, boolean hasMask) throws IOException {
@@ -350,6 +356,18 @@ public class PDFAssembler {
         preserver.preserve(source, output, outPages);
         if (usePdfa) {
             addPdfaMetadata(output);
+        }
+        if (producer != null) {
+            PDDocumentInformation info = output.getDocumentInformation();
+            String existing = info != null ? info.getProducer() : null;
+            String newProducer = (existing != null && !existing.isBlank())
+                    ? existing + " -> " + producer
+                    : producer;
+            if (info == null) {
+                info = new PDDocumentInformation();
+                output.setDocumentInformation(info);
+            }
+            info.setProducer(newProducer);
         }
         pdfaFont = null;
     }

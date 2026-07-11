@@ -538,4 +538,50 @@ class PDFAssemblerRegressionTest {
                 + (fontDictCount / 2) + " font loads for 2 pages)");
         }
     }
+
+    @Test
+    void producer_appendsToSourceProducer() throws IOException {
+        File source = new File(tempDir, "source-with-producer.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            doc.getDocumentInformation().setProducer("SourceTool");
+            doc.save(source);
+        }
+
+        BufferedImage bg = new BufferedImage(PAGE_W, PAGE_H, BufferedImage.TYPE_BYTE_GRAY);
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("x", new Rectangle(10, 10, 20, 20), 0.95));
+        PageResult ocr = new PageResult(1, PAGE_W, PAGE_H, blocks);
+
+        PDFAssembler assembler = new PDFAssembler();
+        assembler.setProducer("TrulyFreeOCR");
+        try (PDDocument output = assembler.assemble(source,
+                Collections.singletonList(bg), null, Collections.singletonList(ocr), false)) {
+            assertEquals("SourceTool -> TrulyFreeOCR",
+                output.getDocumentInformation().getProducer());
+        }
+    }
+
+    @Test
+    void producer_setsWhenSourceMissing() throws IOException {
+        File source = new File(tempDir, "source-no-producer.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            // Intentionally no setProducer — source has no Producer
+            doc.save(source);
+        }
+
+        BufferedImage bg = new BufferedImage(PAGE_W, PAGE_H, BufferedImage.TYPE_BYTE_GRAY);
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("x", new Rectangle(10, 10, 20, 20), 0.95));
+        PageResult ocr = new PageResult(1, PAGE_W, PAGE_H, blocks);
+
+        PDFAssembler assembler = new PDFAssembler();
+        assembler.setProducer("TrulyFreeOCR");
+        try (PDDocument output = assembler.assemble(source,
+                Collections.singletonList(bg), null, Collections.singletonList(ocr), false)) {
+            assertEquals("TrulyFreeOCR",
+                output.getDocumentInformation().getProducer());
+        }
+    }
 }

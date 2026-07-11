@@ -150,6 +150,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             assembler.setCompressor(compressor);
             assembler.setBackgroundScale(settings.getDouble("pipeline.mrc.backgroundScale", 0.33));
             assembler.setBgSmoothSigma((float) settings.getDouble("pipeline.mrc.bgSmoothSigma", 0.8));
+            assembler.setProducer(settings.getString("pdf.producer", "TrulyFreeOCR"));
 
             // Resolve worker thread count: CLI arg > settings cap > default (available processors)
             int workerThreads;
