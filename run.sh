@@ -11,7 +11,7 @@ fi
 
 FAT_JAR="$SCRIPT_DIR/build/libs/trulyfreeocr.jar"
 if [ ! -f "$FAT_JAR" ]; then
-  "$SCRIPT_DIR/gradlew" build
+  JAVA_HOME="$SCRIPT_DIR/deps/jdk" "$SCRIPT_DIR/gradlew" build
 fi
 
 # Detect platform for tesseract path (linux/mac/win)
