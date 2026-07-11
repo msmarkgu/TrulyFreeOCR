@@ -76,7 +76,29 @@ echo "JDK home: $JAVA_HOME_PATH"
 # Set TFOCR_JAVA_HOME for subsequent steps
 export TFOCR_JAVA_HOME="$JAVA_HOME_PATH"
 
-# ── 2. Download Tesseract language data ─────────────────────────────────────
+# ── 2. Download Gradle 8.0.1 ─────────────────────────────────────────────────
+GRADLE_DIR="$SCRIPT_DIR/deps/gradle"
+GRADLE_VERSION="8.0.1"
+if [ "$FORCE_DOWNLOAD" = true ] || [ ! -x "$GRADLE_DIR/bin/gradle" ]; then
+  echo "Downloading Gradle $GRADLE_VERSION..."
+  rm -rf "$GRADLE_DIR"
+  mkdir -p "$GRADLE_DIR"
+  curl -fsSL -o "$SCRIPT_DIR/gradle-bin.zip" \
+    "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+  unzip -qo "$SCRIPT_DIR/gradle-bin.zip" -d "$SCRIPT_DIR/deps"
+  # Move contents from versioned folder to deps/gradle
+  if [ -d "$SCRIPT_DIR/deps/gradle-${GRADLE_VERSION}" ]; then
+    mv "$SCRIPT_DIR/deps/gradle-${GRADLE_VERSION}"/* "$GRADLE_DIR/"
+    rmdir "$SCRIPT_DIR/deps/gradle-${GRADLE_VERSION}"
+  fi
+  rm -f "$SCRIPT_DIR/gradle-bin.zip"
+  chmod +x "$GRADLE_DIR/bin/gradle"
+  echo "Gradle $GRADLE_VERSION downloaded to $GRADLE_DIR"
+else
+  echo "Gradle already present in $GRADLE_DIR"
+fi
+
+# ── 4. Download Tesseract language data ─────────────────────────────────────
 TESSDATA_DIR="$SCRIPT_DIR/deps/tesseract/tessdata"
 mkdir -p "$TESSDATA_DIR"
 
@@ -92,7 +114,7 @@ for lang in $LANGUAGES; do
 done
 echo "Tessdata downloaded to $TESSDATA_DIR (${LANGUAGES})"
 
-# ── 3. Download Tesseract + jbig2enc project-local binaries ────────────
+# ── 5. Download Tesseract + jbig2enc project-local binaries ────────────
 TESSERACT_DIR="$SCRIPT_DIR/deps/tesseract/$OS"
 JBIG2ENC_DIR="$SCRIPT_DIR/deps/jbig2enc/$OS"
 mkdir -p "$TESSERACT_DIR/lib" "$JBIG2ENC_DIR/lib"
@@ -189,7 +211,7 @@ WRAPPER
   echo "Created jbig2enc wrapper at $JBIG2ENC_DIR/jbig2enc"
 fi
 
-# ── 4. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# ── 6. Download jbig2enc (macOS only) ──────────────────────────────────────────
 # Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
   mac)
@@ -199,8 +221,8 @@ case "$OS" in
     ;;
 esac
 
-# ── 5. Build project ────────────────────────────────────────────────────────
+# ── 7. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"
-echo "Build: $TFOCR_JAVA_HOME/bin/java -jar gradle/wrapper/gradle-wrapper.jar build"
+echo "Build: ./gradlew build"
