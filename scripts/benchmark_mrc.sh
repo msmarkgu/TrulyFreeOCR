@@ -6,7 +6,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PDF_DIR="$REPO_DIR/tests/test-files/real-world"
-JAR="$REPO_DIR/build/libs/trulyfreeocr.jar"
+JAR="$REPO_DIR/build/trulyfreeocr.jar"
 JAVA="$REPO_DIR/deps/jdk/bin/java"
 if [ ! -x "$JAVA" ]; then
   # Try PATH

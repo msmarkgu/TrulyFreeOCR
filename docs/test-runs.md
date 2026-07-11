@@ -1,7 +1,7 @@
 1. No-MRC, 1 thread:
 
 ```
-(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 1 --no-mrc ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 1 --no-mrc ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf (1.9 MB)
@@ -35,7 +35,7 @@ Done.  prep+ocr 96.6s / asm 4.8s = 101.4s total
 2. No-MRC, 2 threads:
 
 ```
-(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 2 --no-mrc ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 2 --no-mrc ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf (1.9 MB)
@@ -69,7 +69,7 @@ Done.  prep+ocr 55.9s / asm 4.5s = 60.4s total
 3. MRC, 1 thread:
 
 ```
-(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 1 ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 1 ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf (1.9 MB)
@@ -106,7 +106,7 @@ Done.  prep+ocr 117.0s / asm 39.4s = 156.4s total
 
 ```
 (base) mgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar
-build/libs/trulyfreeocr.jar --settings settings.jsonc --thre
+build/trulyfreeocr.jar --settings settings.jsonc --thre
 ads 2 ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
