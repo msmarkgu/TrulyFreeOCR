@@ -4,7 +4,7 @@ BUILD SUCCESSFUL in 13s
 9 actionable tasks: 8 executed, 1 up-to-date
 (base) bgu@z30b:~/../TrulyFreeOCR$
 (base) bgu@z30b:~/../TrulyFreeOCR$
-(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 4 ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 4 ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf
@@ -32,7 +32,7 @@ Done.  prep+ocr 55.8s / asm 20.4s = 76.1s total
 
 (base) bgu@z30b:~/../TrulyFreeOCR$
 (base) bgu@z30b:~/../TrulyFreeOCR$
-(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 2 ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 2 ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf
@@ -59,7 +59,7 @@ TrulyFreeOCR v1.0.0
 Done.  prep+ocr 59.5s / asm 20.2s = 79.7s total
 
 (base) bgu@z30b:~/../TrulyFreeOCR$
-(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/libs/trulyfreeocr.jar --settings settings.jsonc --threads 1 ./tests/eval-corpus/sherlock-holmes-010p.pdf
+(base) bgu@z30b:~/../TrulyFreeOCR$ ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --settings settings.jsonc --threads 1 ./tests/eval-corpus/sherlock-holmes-010p.pdf
 
 TrulyFreeOCR v1.0.0
   Input:  ./tests/eval-corpus/sherlock-holmes-010p.pdf

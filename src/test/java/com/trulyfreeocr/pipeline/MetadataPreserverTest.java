@@ -72,7 +72,7 @@ class MetadataPreserverTest {
 
     @Test
     void preserve_copiesDocumentInfo() throws IOException {
-        File input = new File("tests/test-files/generated/simple-text.pdf");
+        File input = new File("tests/simple-text.pdf");
         var pages = extractor.extractPages(input);
         var backgrounds = pages.stream()
                 .map(segmenter::segment)
@@ -99,7 +99,7 @@ class MetadataPreserverTest {
 
     @Test
     void preserve_copiesOutline() throws IOException {
-        File input = new File("tests/test-files/generated/with-annotations.pdf");
+        File input = new File("tests/with-annotations.pdf");
         var pages = extractor.extractPages(input);
         var backgrounds = pages.stream()
                 .map(segmenter::segment)
@@ -131,7 +131,7 @@ class MetadataPreserverTest {
 
     @Test
     void preserve_copiesAnnotations() throws IOException {
-        File input = new File("tests/test-files/generated/with-annotations.pdf");
+        File input = new File("tests/with-annotations.pdf");
         var pages = extractor.extractPages(input);
         var backgrounds = pages.stream()
                 .map(segmenter::segment)

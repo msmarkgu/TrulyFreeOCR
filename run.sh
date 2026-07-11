@@ -9,7 +9,7 @@ if [ ! -x "$JAVA" ]; then
   exit 1
 fi
 
-FAT_JAR="$SCRIPT_DIR/build/libs/trulyfreeocr.jar"
+FAT_JAR="$SCRIPT_DIR/build/trulyfreeocr.jar"
 if [ ! -f "$FAT_JAR" ]; then
   JAVA_HOME="$SCRIPT_DIR/deps/jdk" "$SCRIPT_DIR/gradlew" build
 fi
