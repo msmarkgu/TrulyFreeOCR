@@ -171,34 +171,44 @@ If these files and binaries exist, the installation is complete.
 
 ### Usage
 
-Build the fat JAR (or use `./run.sh` which auto-builds):
+Generate a sample test PDF, or use your own:
+```bash
+./gradlew generateTestPdfs
+```
+
+Build the fat JAR:
 ```bash
 ./gradlew build
 ```
 
-Basic usage:
+Basic usage (recommended — auto-builds, uses local JDK):
 ```bash
-java -jar build/libs/trulyfreeocr.jar input.pdf -o output.pdf
+./run.sh tests/test-files/generated/simple-text.pdf -o output.pdf
+```
+
+If you prefer to invoke the JAR directly with the project-local JDK:
+```bash
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf -o output.pdf
 ```
 
 Common options:
 ```bash
 # Set DPI (default: 300)
-java -jar build/libs/trulyfreeocr.jar input.pdf --dpi 300
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --dpi 300
 
 # Set language (default: eng)
-java -jar build/libs/trulyfreeocr.jar input.pdf --language spa
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --language spa
 
 # Disable MRC compression
-java -jar build/libs/trulyfreeocr.jar input.pdf --no-mrc
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --no-mrc
 
-# Using the convenience wrapper (auto-detects JDK, builds if needed)
-./run.sh input.pdf -o output.pdf
+# Use 2 concurrent OCR threads (default: 1)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/test-files/generated/simple-text.pdf --threads 2
 ```
 
 For more options, run:
 ```bash
-java -jar build/libs/trulyfreeocr.jar --help
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar --help
 ```
 
 See [`docs/test-runs.md`](docs/test-runs.md) for example benchmark runs with
