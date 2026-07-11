@@ -34,6 +34,16 @@ application {
 }
 
 tasks.named<Test>("test") {
+    dependsOn("generateTestPdfs")
+    doFirst {
+        // Ensure Tesseract TSV config file exists for OCR tests
+        val configsDir = file("deps/tesseract/tessdata/configs")
+        configsDir.mkdirs()
+        val tsvConfig = File(configsDir, "tsv")
+        if (!tsvConfig.exists()) {
+            tsvConfig.writeText("tessedit_create_tsv 1\n")
+        }
+    }
     outputs.upToDateWhen { false }
     useJUnitPlatform {
         excludeTags("eval")
