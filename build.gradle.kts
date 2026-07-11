@@ -99,6 +99,7 @@ tasks {
         archiveBaseName.set("trulyfreeocr")
         archiveClassifier.set("")
         archiveVersion.set("")
+        destinationDirectory.set(layout.buildDirectory)
     }
     build {
         dependsOn(shadowJar)
