@@ -153,7 +153,8 @@ class PipelineIntegrationTest {
         var foregroundMasks = segmented.stream().map(SegmentedImage::getForegroundMask).toList();
         var ocrResults = processOcr(engine, pages);
 
-        File tempOutput = File.createTempFile("tfocr-integration-", ".pdf");
+        Files.createDirectories(Path.of("temp"));
+        File tempOutput = Files.createTempFile(Path.of("temp"), "tfocr-integration-", ".pdf").toFile();
         tempOutput.deleteOnExit();
         try (PDDocument output = assembler.assemble(input, backgrounds, foregroundMasks, ocrResults, false)) {
             output.save(tempOutput);
@@ -191,7 +192,8 @@ class PipelineIntegrationTest {
     }
 
     private List<PageResult> processOcr(OCREngine engine, List<BufferedImage> pages) throws IOException {
-        Path tempDir = Files.createTempDirectory("tfocr-test-");
+        Files.createDirectories(Path.of("temp"));
+        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
         try {
             for (int i = 0; i < pages.size(); i++) {
                 BufferedImage page = pages.get(i);

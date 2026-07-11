@@ -3,6 +3,7 @@ package com.trulyfreeocr.util;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,7 +26,8 @@ public class TempFileManager {
      * @return The created temporary File.
      */
     public File createTempFile(String prefix, String suffix) throws IOException {
-        File f = Files.createTempFile(prefix, suffix).toFile();
+        Files.createDirectories(Path.of("temp"));
+        File f = Files.createTempFile(Path.of("temp"), prefix, suffix).toFile();
         f.deleteOnExit();
         tempFiles.add(f);
         return f;

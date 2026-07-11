@@ -13,7 +13,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 - **Commercial / Enterprise teams** — All dependencies are Apache 2.0 / BSD / MIT.
   No GPL, no AGPL, no proprietary components — no obligation to open source your code.
 
-- **DevOps / Deployment engineers** — Every dependency (JDK, Tesseract, Leptonica,
+- **DevOps / Deployment engineers** — Every dependency (Gradle, JDK, Tesseract, Leptonica,
   jbig2enc, language data) downloads into project subdirectories via `bootstrap.sh`
   (Linux/macOS) or `bootstrap.bat` (Windows). Zero admin rights required: no sudo,
   no brew, no apt-get install, no Windows installer wizard.
@@ -41,7 +41,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 A survey of 19 open-source OCR projects (see [`docs/similar-projects.md`](docs/similar-projects.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
-- **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; no sudo, no Python, no system deps
+- **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local; no sudo, no Python, no system deps
 - **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project)
 - **Searchable PDF output** — invisible text layer + optional PDF/A-2b
 - **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine
@@ -83,6 +83,7 @@ and Windows.
    ```
    This will install into local project subdirectories:
    - OpenJDK 21 LTS → `deps/jdk/`
+   - Gradle 8.0.1 → `deps/gradle/`
    - Tesseract OCR engine → `deps/tesseract/$OS/`
    - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn, osd) → `deps/tesseract/tessdata/`
    - jbig2enc for JBIG2 compression → `deps/jbig2enc/$OS/`
@@ -96,6 +97,10 @@ deps/
 ├── jdk/
 │   ├── bin/            # java, javac, jar, ...
 │   ├── lib/            # rt, modules, security, ...
+│   └── ...
+├── gradle/
+│   ├── bin/            # gradle (build tool)
+│   ├── lib/            # Gradle runtime libraries
 │   └── ...
 ├── tesseract/
 │   ├── linux/
@@ -154,6 +159,9 @@ After running the bootstrap script, verify all dependencies were installed:
 # Check jbig2enc (Linux/macOS only; Windows uses CCITT G4 fallback)
 ls -l ./deps/jbig2enc/*/jbig2 2>/dev/null || echo "jbig2enc not available (CCITT G4 fallback active)"
 
+# Check Gradle
+./deps/gradle/bin/gradle --version
+
 # Check language data
 ls ./deps/tesseract/tessdata/*.traineddata
 ```
@@ -161,6 +169,11 @@ ls ./deps/tesseract/tessdata/*.traineddata
 If these files and binaries exist, the installation is complete.
 
 ### Usage
+
+Build the fat JAR (or use `./run.sh` which auto-builds):
+```bash
+./gradlew build
+```
 
 Basic usage:
 ```bash
@@ -336,7 +349,6 @@ WER/CER targets, parameter sensitivity sweeps, and performance baselines.
 | Dependency | Version | License | Project |
 |---|---|---|---|
 | Shadow plugin | 8.1.1 | Apache 2.0 | https://github.com/johnrengelman/shadow |
-| Gradle wrapper | 8.0.1 | Apache 2.0 | https://gradle.org |
 
 ### Test (from Gradle)
 
@@ -359,8 +371,9 @@ The `bootstrap.sh` / `bootstrap.bat` script handles setting them up from scratch
 with no admin rights required.
 
 | Dependency | Project Location | License | Project |
-|---|---|---|---|
+|---|---|---|---|---|
 | OpenJDK 21 LTS | `deps/jdk/` | GPL 2.0 + Classpath Exception | https://adoptium.net |
+| Gradle 8.0.1 | `deps/gradle/` | Apache 2.0 | https://gradle.org |
 | Tesseract OCR | `deps/tesseract/$OS/` (binary + libs) | Apache 2.0 | https://github.com/tesseract-ocr/tesseract |
 | Leptonica | `deps/tesseract/$OS/lib/liblept.so.5`, also copied to `deps/jbig2enc/$OS/lib/` | BSD 2-Clause | https://github.com/DanBloomberg/leptonica |
 | jbig2enc | `deps/jbig2enc/$OS/` (binary + lib) | Apache 2.0 | https://github.com/agl/jbig2enc |

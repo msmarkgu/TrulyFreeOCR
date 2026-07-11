@@ -1,20 +1,5 @@
 #!/bin/sh
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-_JAVA_BIN="$SCRIPT_DIR/deps/jdk/bin/java"
-if [ -x "$_JAVA_BIN" ]; then
-  export JAVA_HOME="$SCRIPT_DIR/deps/jdk"
-  echo "Using JDK: $JAVA_HOME" >&2
-  # Stop stale daemon if JDK was replaced (stamp file check)
-  if [ "${1:-}" != "--stop" ]; then
-    STAMP="$SCRIPT_DIR/deps/jdk/.daemon_stopped"
-    if [ ! -f "$STAMP" ] || [ "$SCRIPT_DIR/deps/jdk/release" -nt "$STAMP" ]; then
-      "$SCRIPT_DIR/gradlew" --stop 2>/dev/null || true
-      touch "$STAMP"
-    fi
-  fi
-fi
-
 #
 # Copyright © 2015-2021 the original authors.
 #
@@ -101,7 +86,7 @@ APP_BASE_NAME=${0##*/}
 APP_HOME=$( cd "${APP_HOME:-./}" && pwd -P ) || exit
 
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-DEFAULT_JVM_OPTS='-Dfile.encoding=UTF-8 "-Xmx64m" "-Xms64m"'
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
 # Use the maximum available, or set MAX_FD != -1 to use that value.
 MAX_FD=maximum
@@ -128,6 +113,23 @@ case "$( uname )" in                #(
   MSYS* | MINGW* )  msys=true    ;; #(
   NONSTOP* )        nonstop=true ;;
 esac
+
+# Use project-local JDK and Gradle if available
+LOCAL_JDK="$APP_HOME/deps/jdk"
+if [ -x "$LOCAL_JDK/bin/java" ]; then
+  export JAVA_HOME="$LOCAL_JDK"
+  echo "Using JDK: $LOCAL_JDK ($("$LOCAL_JDK/bin/java" -version 2>&1 | head -1))"
+else
+  echo "Warning: project-local JDK not found at $LOCAL_JDK"
+fi
+
+LOCAL_GRADLE="$APP_HOME/deps/gradle/bin/gradle"
+if [ -x "$LOCAL_GRADLE" ]; then
+  echo "Using Gradle: $LOCAL_GRADLE ($("$LOCAL_GRADLE" --version 2>&1 | grep "^Gradle "))"
+  # Stop stale daemons that may have been started with a different JDK
+  "$LOCAL_GRADLE" --stop >/dev/null 2>&1 || true
+  exec "$LOCAL_GRADLE" "$@"
+fi
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 

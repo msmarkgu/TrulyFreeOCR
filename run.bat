@@ -12,6 +12,7 @@ if not exist "%JAVA%" (
 
 set "FAT_JAR=%SCRIPT_DIR%build\libs\trulyfreeocr.jar"
 if not exist "%FAT_JAR%" (
+  set "JAVA_HOME=%SCRIPT_DIR%deps\jdk"
   "%SCRIPT_DIR%gradlew.bat" build
 )
 
