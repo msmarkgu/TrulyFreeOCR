@@ -6,6 +6,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -20,8 +22,8 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
@@ -31,8 +33,13 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class PDFAssemblerRegressionTest {
 
-    @TempDir
     File tempDir;
+
+    @BeforeEach
+    void setup() throws IOException {
+        Files.createDirectories(Path.of("temp"));
+        tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-regression-").toFile();
+    }
 
     private static final int PAGE_W = 400;
     private static final int PAGE_H = 600;
