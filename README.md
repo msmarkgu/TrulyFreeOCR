@@ -1,10 +1,10 @@
 # TrulyFreeOCR
 
-Business-friendly open source OCR pipeline to produce fully searchable PDFs.
+Business-friendly open source OCR pipeline to produce fully searchable and highly compressed PDFs.
 All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
-**Input**: Any PDF (searchable, non-searchable, or partially searchable)<br>
-**Output**: Fully searchable, MRC-compressed PDF
+**Input**: Any PDF or image (PNG/JPEG/TIFF/BMP/GIF)<br>
+**Output**: Fully searchable, MRC-compressed PDF ([Mixed Raster Content](https://en.wikipedia.org/wiki/Mixed_raster_content))
 
 ---
 
@@ -56,7 +56,7 @@ Where other tools fall short:
 - **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
 - **[surya](https://github.com/VikParuchuri/surya) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
 
-TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and no GPU required. Simply run the self-contained fat JAR, input a PDF, and get a highly compressed, fully searchable PDF out.
+TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and no GPU required. Simply run the self-contained fat JAR, input a PDF or image, and get a highly compressed, fully searchable PDF out.
 
 ---
 
@@ -186,6 +186,11 @@ Basic usage (recommended — auto-builds, uses local JDK):
 ./run.sh tests/simple-text.pdf -o output.pdf
 ```
 
+Or use an image file:
+```bash
+./run.sh scan.png -o output.pdf
+```
+
 If you prefer to invoke the JAR directly with the project-local JDK:
 ```bash
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf -o output.pdf
@@ -222,12 +227,12 @@ CLI flags override `settings.jsonc` values, which override hardcoded defaults.
 ## Pipeline
 
 ```
-Input PDF
+Input PDF / Image
     |
     v
-PageExtractor  — PDFBox PDFRenderer (configurable DPI) → per-page BufferedImage
+PageExtractor  — PDFBox PDFRenderer (PDF) / ImageIO (image) → per-page BufferedImage
     |
-    v (main thread, sequential — PDFRenderer not thread-safe)
+    v (main thread, sequential — page provider not thread-safe)
 +----------------------------+
 | Worker pool (N threads)    |
 |  per-page: toGrayscale →   |
@@ -285,7 +290,7 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 | `tesseract.psm` | `1` | Page segmentation mode |
 | `pipeline.mrc.enabled` | `true` | Enable MRC compression (background + foreground mask + text) |
 | `pipeline.ocr.maxThreads` | `1` | Max concurrent Tesseract subprocesses (1 = sequential OCR; increase on fast NVMe + >16 GB RAM) |
-| `rendering.dpi` | `300` | PDF rendering resolution |
+| `rendering.dpi` | `300` | PDF rendering resolution; for images, DPI is read from embedded metadata |
 | `segmenter.tileSize` | `64` | Background normalization tile size (px) |
 | `segmenter.percentile` | `0.95` | Background level percentile per tile |
 | `segmenter.inpaintRadius` | `3` | Inpainting search radius (px) |
@@ -337,7 +342,7 @@ WER/CER targets, parameter sensitivity sweeps, and performance baselines.
 
 | Component | What it does |
 |---|---|
-| **PageExtractor** | Renders each PDF page to a `BufferedImage` at configurable DPI using PDFBox's `PDFRenderer.renderImageWithDPI()` |
+| **PageExtractor** | Renders each PDF page to a `BufferedImage` at configurable DPI using PDFBox's `PDFRenderer.renderImageWithDPI()`. For image inputs, pages are loaded directly via `ImageIO`. |
 | **ImageSegmenter** | Pure-Java page segmentation: grayscale conversion → background normalization → Otsu binarization → inpainting. No Leptonica dependency. |
 | **OCREngine** | Delegates to Tesseract CLI (not JNA/Tess4J) via subprocess with TSV output. Avoids native-library version mismatches. |
 | **JBIG2Compressor** | Compresses binary foreground masks via jbig2enc (`-p -s`). Falls back to CCITT Group 4 fax encoding via PDFBox when jbig2enc is unavailable. |
