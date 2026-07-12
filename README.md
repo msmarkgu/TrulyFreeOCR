@@ -209,6 +209,12 @@ Common options:
 
 # Use 2 concurrent OCR threads (default: 1)
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --threads 2
+
+# Export recognized text to a file
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --txt-output output.txt
+
+# Export word bounding boxes as JSON
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --bbox-output words.json
 ```
 
 For more options, run:
@@ -301,7 +307,7 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 | `output.file` | `output.pdf` | Default output file path |
 | `jbig2enc.flags` | `-p -s` | Flags passed to the jbig2enc binary |
 
-CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--txt-output`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--settings` (path to a custom settings file).
+CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--txt-output`, `--bbox-output`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--settings` (path to a custom settings file).
 
 ---
 
