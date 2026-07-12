@@ -40,6 +40,9 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.SegmentedImage;
 import com.trulyfreeocr.model.TextBlock;
@@ -100,6 +103,9 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--txt-output"}, description = "Path for extracted text output (default: <output>.txt)")
     private File txtOutput;
 
+    @Option(names = {"--bbox-output"}, description = "Path for word bounding box JSON output (default: <output>.json)")
+    private File bboxOutput;
+
     @Override
     public Integer call() {
         Settings settings = Settings.load();
@@ -118,6 +124,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     : new File(settings.getString("output.file", "output.pdf"));
             File resolvedTxtOutput = txtOutput != null ? txtOutput
                     : new File(resolvedOutput.getAbsolutePath().replaceAll("\\.pdf$", "") + ".txt");
+            File resolvedJsonOutput = bboxOutput != null ? bboxOutput
+                    : new File(resolvedOutput.getAbsolutePath().replaceAll("\\.pdf$", "") + ".json");
             String resolvedTessdata = tessdataDir != null ? tessdataDir.getAbsolutePath()
                     : settings.getString("tessdata.dir", "./deps/tesseract/tessdata");
             String resolvedNative = nativeDir != null ? nativeDir.getAbsolutePath()
@@ -179,7 +187,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             System.out.println("  OCR Workers: " + workerThreads + " thread(s)");
 
             // Run the pipeline
-            runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, segmenter, ocrEngine, compressor, assembler,
+            runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, resolvedJsonOutput, segmenter, ocrEngine, compressor, assembler,
                 useMrc, usePdfa, resolvedDpi, workerThreads);
             return 0;
 
@@ -190,7 +198,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
         }
     }
 
-    private void runPipeline(File inputFile, File outputFile, File txtOutput,
+    private void runPipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                              ImageSegmenter segmenter,
                              OCREngine ocrEngine, JBIG2Compressor compressor,
                              PDFAssembler assembler, boolean useMrc, boolean usePdfa,
@@ -202,11 +210,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
         try {
             if (isImageFile(inputFile)) {
-                runImagePipeline(inputFile, outputFile, txtOutput, tempDir, inputName,
+                runImagePipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
                     segmenter, ocrEngine, compressor, assembler,
                     useMrc, usePdfa, dpi, workerThreads);
             } else {
-                runPdfPipeline(inputFile, outputFile, txtOutput, tempDir, inputName,
+                runPdfPipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
                     segmenter, ocrEngine, compressor, assembler,
                     useMrc, usePdfa, dpi, workerThreads);
             }
@@ -215,7 +223,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
         }
     }
 
-    private void runPdfPipeline(File inputFile, File outputFile, File txtOutput,
+    private void runPdfPipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                                 File tempDir, String inputName,
                                 ImageSegmenter segmenter,
                                 OCREngine ocrEngine, JBIG2Compressor compressor,
@@ -229,14 +237,14 @@ public class TrulyFreeOCR implements Callable<Integer> {
             if (srcWords > 0) {
                 System.out.println("  Words:  " + srcWords + " (source text)");
             }
-            processPages(source, pageCount, srcWords, outputFile, txtOutput, tempDir,
+            processPages(source, pageCount, srcWords, outputFile, txtOutput, bboxOutput, tempDir,
                 segmenter, ocrEngine, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads,
                 (i) -> renderer.renderImageWithDPI(i, dpi));
         }
     }
 
-    private void runImagePipeline(File inputFile, File outputFile, File txtOutput,
+    private void runImagePipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                                   File tempDir, String inputName,
                                   ImageSegmenter segmenter,
                                   OCREngine ocrEngine, JBIG2Compressor compressor,
@@ -261,7 +269,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 float h = page.getHeight() * 72f / dpi;
                 source.addPage(new PDPage(new PDRectangle(w, h)));
             }
-            processPages(source, pageCount, 0, outputFile, txtOutput, tempDir,
+            processPages(source, pageCount, 0, outputFile, txtOutput, bboxOutput, tempDir,
                 segmenter, ocrEngine, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads,
                 pages::get);
@@ -269,7 +277,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     }
 
     private void processPages(PDDocument source, int pageCount, int srcWords,
-                              File outputFile, File txtOutput, File tempDir,
+                              File outputFile, File txtOutput, File bboxOutput, File tempDir,
                               ImageSegmenter segmenter,
                               OCREngine ocrEngine, JBIG2Compressor compressor,
                               PDFAssembler assembler, boolean useMrc, boolean usePdfa,
@@ -375,6 +383,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
             System.out.println("  Writing text output...");
             writeTextOutput(txtOutput, ocrResults);
 
+            // ── Write JSON bounding box output ──
+            System.out.println("  Writing JSON output...");
+            writeJsonOutput(bboxOutput, ocrResults);
+
             // ── JBIG2 batch compression (shared dictionary across all pages) ──
             JBIG2Compressor.BatchResult jbig2Batch = null;
             if (useMrc && compressor != null) {
@@ -441,6 +453,49 @@ public class TrulyFreeOCR implements Callable<Integer> {
             }
         } finally {
             ocrExecutor.shutdownNow();
+        }
+    }
+
+    private static void writeJsonOutput(File file, List<PageResult> results) throws IOException {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        List<JsonPage> pages = new ArrayList<>(results.size());
+        for (PageResult page : results) {
+            List<JsonWord> words = new ArrayList<>(page.getTextBlocks().size());
+            for (TextBlock tb : page.getTextBlocks()) {
+                words.add(new JsonWord(
+                    tb.getWord(),
+                    tb.getBbox().x,
+                    tb.getBbox().y,
+                    tb.getBbox().x + tb.getBbox().width,
+                    tb.getBbox().y + tb.getBbox().height,
+                    tb.getConfidence()
+                ));
+            }
+            pages.add(new JsonPage(page.getPageNumber(), page.getWidth(), page.getHeight(), words));
+        }
+        Files.writeString(file.toPath(), gson.toJson(pages), StandardCharsets.UTF_8);
+    }
+
+    private static class JsonPage {
+        int page;
+        int width;
+        int height;
+        List<JsonWord> words;
+        JsonPage(int page, int width, int height, List<JsonWord> words) {
+            this.page = page; this.width = width; this.height = height; this.words = words;
+        }
+    }
+
+    private static class JsonWord {
+        String word;
+        int x1;
+        int y1;
+        int x2;
+        int y2;
+        double confidence;
+        JsonWord(String word, int x1, int y1, int x2, int y2, double confidence) {
+            this.word = word; this.x1 = x1; this.y1 = y1;
+            this.x2 = x2; this.y2 = y2; this.confidence = confidence;
         }
     }
 
