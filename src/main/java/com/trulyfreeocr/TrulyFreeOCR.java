@@ -48,7 +48,8 @@ import com.trulyfreeocr.model.SegmentedImage;
 import com.trulyfreeocr.model.TextBlock;
 import com.trulyfreeocr.pipeline.ImageSegmenter;
 import com.trulyfreeocr.pipeline.JBIG2Compressor;
-import com.trulyfreeocr.pipeline.OCREngine;
+import com.trulyfreeocr.pipeline.OcrProvider;
+import com.trulyfreeocr.pipeline.TesseractProvider;
 import com.trulyfreeocr.pipeline.PDFAssembler;
 import com.trulyfreeocr.util.Settings;
 
@@ -106,6 +107,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--bbox-output"}, description = "Path for word bounding box JSON output (default: <output>.json)")
     private File bboxOutput;
 
+    @Option(names = {"--ocr-engine"}, defaultValue = "tesseract",
+            description = "OCR engine to use: tesseract (default) or paddle")
+    private String ocrEngine;
+
     @Override
     public Integer call() {
         Settings settings = Settings.load();
@@ -151,12 +156,21 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     settings.getDouble("segmenter.percentile", 0.95),
                     settings.getInt("segmenter.inpaintRadius", 3)
             );
-            OCREngine ocrEngine = new OCREngine(
-                    resolvedTessdata,
-                    tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"),
-                    resolvedLang,
-                    resolvedPsm
-            );
+            OcrProvider ocrProvider;
+            switch (ocrEngine) {
+                case "tesseract":
+                    ocrProvider = new TesseractProvider(
+                            resolvedTessdata,
+                            tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"),
+                            resolvedLang,
+                            resolvedPsm
+                    );
+                    break;
+                case "paddle":
+                    throw new UnsupportedOperationException("PaddleOCR engine not yet implemented");
+                default:
+                    throw new IllegalArgumentException("Unknown OCR engine: " + ocrEngine);
+            }
             JBIG2Compressor compressor = new JBIG2Compressor(resolvedNative);
             PDFAssembler assembler = new PDFAssembler(
                     settings.getString("pdf.font", "HELVETICA"),
@@ -187,7 +201,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             System.out.println("  OCR Workers: " + workerThreads + " thread(s)");
 
             // Run the pipeline
-            runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, resolvedJsonOutput, segmenter, ocrEngine, compressor, assembler,
+            runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, resolvedJsonOutput, segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, resolvedDpi, workerThreads);
             return 0;
 
@@ -200,7 +214,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
     private void runPipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                              ImageSegmenter segmenter,
-                             OCREngine ocrEngine, JBIG2Compressor compressor,
+                             OcrProvider ocrProvider, JBIG2Compressor compressor,
                              PDFAssembler assembler, boolean useMrc, boolean usePdfa,
                              float dpi, int workerThreads) throws IOException {
 
@@ -211,11 +225,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
         try {
             if (isImageFile(inputFile)) {
                 runImagePipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
-                    segmenter, ocrEngine, compressor, assembler,
+                    segmenter, ocrProvider, compressor, assembler,
                     useMrc, usePdfa, dpi, workerThreads);
             } else {
                 runPdfPipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
-                    segmenter, ocrEngine, compressor, assembler,
+                    segmenter, ocrProvider, compressor, assembler,
                     useMrc, usePdfa, dpi, workerThreads);
             }
         } finally {
@@ -226,7 +240,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     private void runPdfPipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                                 File tempDir, String inputName,
                                 ImageSegmenter segmenter,
-                                OCREngine ocrEngine, JBIG2Compressor compressor,
+                                OcrProvider ocrProvider, JBIG2Compressor compressor,
                                 PDFAssembler assembler, boolean useMrc, boolean usePdfa,
                                 float dpi, int workerThreads) throws IOException {
         try (PDDocument source = Loader.loadPDF(inputFile)) {
@@ -238,7 +252,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 System.out.println("  Words:  " + srcWords + " (source text)");
             }
             processPages(source, pageCount, srcWords, outputFile, txtOutput, bboxOutput, tempDir,
-                segmenter, ocrEngine, compressor, assembler,
+                segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads,
                 (i) -> renderer.renderImageWithDPI(i, dpi));
         }
@@ -247,7 +261,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     private void runImagePipeline(File inputFile, File outputFile, File txtOutput, File bboxOutput,
                                   File tempDir, String inputName,
                                   ImageSegmenter segmenter,
-                                  OCREngine ocrEngine, JBIG2Compressor compressor,
+                                  OcrProvider ocrProvider, JBIG2Compressor compressor,
                                   PDFAssembler assembler, boolean useMrc, boolean usePdfa,
                                   float dpi, int workerThreads) throws IOException {
         List<BufferedImage> pages = loadImagePages(inputFile);
@@ -270,7 +284,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 source.addPage(new PDPage(new PDRectangle(w, h)));
             }
             processPages(source, pageCount, 0, outputFile, txtOutput, bboxOutput, tempDir,
-                segmenter, ocrEngine, compressor, assembler,
+                segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads,
                 pages::get);
         }
@@ -279,7 +293,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     private void processPages(PDDocument source, int pageCount, int srcWords,
                               File outputFile, File txtOutput, File bboxOutput, File tempDir,
                               ImageSegmenter segmenter,
-                              OCREngine ocrEngine, JBIG2Compressor compressor,
+                              OcrProvider ocrProvider, JBIG2Compressor compressor,
                               PDFAssembler assembler, boolean useMrc, boolean usePdfa,
                               float dpi, int workerThreads,
                               PageProvider pageProvider) throws IOException {
@@ -324,10 +338,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 ocrFutures.add(ocrExecutor.submit(() -> {
                     long localStart = System.nanoTime();
                     try {
-                        // Convert to grayscale and save for OCR
+                        // Convert to grayscale for OCR
                         BufferedImage gray = toGrayscale(page);
-                        ImageIO.write(gray, "bmp",
-                            new File(tempDir, "page-" + pageIdx + ".bmp"));
 
                         imgWidths[pageIdx] = gray.getWidth();
                         imgHeights[pageIdx] = gray.getHeight();
@@ -346,7 +358,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                             new File(tempDir, "bg-" + pageIdx + ".bmp"));
 
                         // OCR
-                        PageResult r = ocrEngine.ocr(pageIdx, tempDir);
+                        PageResult r = ocrProvider.ocr(gray, pageIdx);
                         double elapsed = (System.nanoTime() - localStart) / 1e9;
                         double cumulative = (System.nanoTime() - pipelineStart) / 1e9;
                         String tn = Thread.currentThread().getName();

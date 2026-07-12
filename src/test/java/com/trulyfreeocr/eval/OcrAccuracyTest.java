@@ -6,20 +6,17 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import javax.imageio.ImageIO;
-
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
-import com.trulyfreeocr.pipeline.OCREngine;
 import com.trulyfreeocr.pipeline.PageExtractor;
+import com.trulyfreeocr.pipeline.TesseractProvider;
 
 /**
  * End-to-end OCR accuracy evaluation on the Sherlock Holmes corpus.
@@ -34,7 +31,7 @@ class OcrAccuracyTest {
     private static final Path CORPUS_DIR = Path.of("tests/eval-corpus");
     private static final double WER_THRESHOLD = 0.05; // flag pages above 5%
 
-    private static OCREngine ocrEngine = new OCREngine();
+    private static TesseractProvider ocrEngine = new TesseractProvider();
 
     @Test void eval_010p() throws IOException { runEval("sherlock-holmes-010p", 10); }
     @Test void eval_020p() throws IOException { runEval("sherlock-holmes-020p", 20); }
@@ -56,8 +53,6 @@ class OcrAccuracyTest {
     }
 
     private void evaluateDocument(File pdf, GroundTruth gt) throws IOException {
-        Files.createDirectories(Path.of("temp"));
-        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-eval-");
         long totalStart = System.currentTimeMillis();
 
         try (PageExtractor pe = new PageExtractor()) {
@@ -65,7 +60,7 @@ class OcrAccuracyTest {
             int n = Math.min(pe.getPageCount(), gt.getPageCount());
             List<PageResult> results = new ArrayList<>(n);
 
-            // Stream pages one at a time to avoid OOM
+            // Stream pages one at a time to avoid OOM, OCR inline
             for (int i = 0; i < n; i++) {
                 BufferedImage page = pe.renderPage(i);
                 if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
@@ -75,13 +70,9 @@ class OcrAccuracyTest {
                     g.dispose();
                     page = gray;
                 }
-                ImageIO.write(page, "bmp", tempDir.resolve("page-" + i + ".bmp").toFile());
-                // page goes out of scope here — only one page in memory at a time
-            }
 
-            for (int i = 0; i < n; i++) {
                 long start = System.currentTimeMillis();
-                PageResult result = ocrEngine.ocr(i, tempDir.toFile());
+                PageResult result = ocrEngine.ocr(page, i);
                 long elapsed = System.currentTimeMillis() - start;
                 results.add(result);
 
@@ -157,13 +148,6 @@ class OcrAccuracyTest {
             System.out.printf("    Mean confidence:      %.1f%n", meanConf);
             System.out.printf("    Total time:           %.1fs%n", totalTime / 1000.0);
             System.out.printf("    Time per page:        %.2fs%n", totalTime / 1000.0 / n);
-        } finally {
-            File dir = tempDir.toFile();
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) f.delete();
-            }
-            dir.delete();
         }
     }
 
