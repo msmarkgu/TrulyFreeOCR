@@ -390,6 +390,20 @@ with no admin rights required.
 | jbig2enc | `deps/jbig2enc/$OS/` (binary + lib) | Apache 2.0 | https://github.com/agl/jbig2enc |
 | Tesseract language data | `deps/tesseract/tessdata/*.traineddata` (eng, fra, spa, deu, chi_sim, chi_tra, jpn, osd) | Apache 2.0 | https://github.com/tesseract-ocr/tessdata |
 
+<details>
+<summary>Why GPL + Classpath Exception is business-friendly</summary>
+
+The Classpath Exception (CPE) attached to GPL 2.0 means that code you run *on* OpenJDK — including TrulyFreeOCR's JAR and your own application code — is **not** subject to GPL copyleft. Only modifications to OpenJDK itself would need to be open-sourced. For practical purposes, using the JDK as a runtime imposes no license obligations on your project or your code. OpenJDK builds from Adoptium (Eclipse Temurin), Oracle, and all major vendors use this same GPL+CPE license.
+
+References:
+[OpenJDK GPLv2+CE](https://openjdk.org/legal/gplv2+ce.html) —
+full exception text, including permission to link with independent modules under any license terms;
+[Adoptium FAQ](https://adoptium.net/docs/faq/) —
+confirms Temurin is free to use commercially under GPLv2+CE;
+[Fedora Wiki](https://fedoraproject.org/wiki/Licensing/GPL_Classpath_Exception) —
+explains that using the class library does not affect licensing of programs written in Java.
+</details>
+
 Binary wrappers in `deps/tesseract/$OS/` and `deps/jbig2enc/$OS/` set `LD_LIBRARY_PATH` so
 the project-local shared libraries are used instead of system-wide ones.
 
