@@ -1,0 +1,4 @@
+page 1
+======
+The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. Sphinx of black quartz, judge my vow. This is a test document for OCR validation. It contains English text rendered as an image, simulating a scanned page that is not searchable. The pipeline should extract this text via Tesseract, then embed it as invisible text over the image. The output PDF should be searchable while retaining the original visual appearance. 
+
