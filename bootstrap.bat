@@ -8,13 +8,19 @@ set "JDK_DIR=%SCRIPT_DIR%deps\jdk"
 if not exist "%JDK_DIR%" mkdir "%JDK_DIR%"
 
 set "FORCE_DOWNLOAD=false"
-if /i "%~1"=="--force" set "FORCE_DOWNLOAD=true"
+set "PADDLE=false"
+for %%a in (%*) do (
+  if /i "%%a"=="--force" set "FORCE_DOWNLOAD=true"
+  if /i "%%a"=="--paddle" set "PADDLE=true"
+)
 
+set "PADDLEOCR_DIR=%SCRIPT_DIR%deps\paddleocr"
 if "%FORCE_DOWNLOAD%"=="true" (
   echo Forcing re-download of all dependencies...
   if exist "%JDK_DIR%" rmdir /S /Q "%JDK_DIR%" 2>nul
   if exist "%TESSDATA_DIR%" rmdir /S /Q "%TESSDATA_DIR%" 2>nul
   if exist "%TESSERACT_DIR%" rmdir /S /Q "%TESSERACT_DIR%" 2>nul
+  if exist "%PADDLEOCR_DIR%" rmdir /S /Q "%PADDLEOCR_DIR%" 2>nul
 )
 
 rem Check if JDK already present
@@ -127,10 +133,59 @@ if not exist "%TESSERACT_DIR%\tesseract.bat" (
   echo Created tesseract wrapper at %TESSERACT_DIR%\tesseract.bat
 )
 
-rem ── 7. Done ───────────────────────────────────────────────────────────
+rem ── 7. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──
+if "%PADDLE%"=="true" (
+  if not exist "%PADDLEOCR_DIR%" mkdir "%PADDLEOCR_DIR%"
+
+  if "%FORCE_DOWNLOAD%"=="true" (
+    if exist "%PADDLEOCR_DIR%" rmdir /S /Q "%PADDLEOCR_DIR%" 2>nul
+    mkdir "%PADDLEOCR_DIR%"
+  )
+
+  if not exist "%PADDLEOCR_DIR%\det.onnx" (
+    echo Downloading PP-OCRv6_small_det ONNX model...
+    powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx' -OutFile '%PADDLEOCR_DIR%\det.onnx'"
+    echo Detection model downloaded
+  ) else (
+    echo PP-OCRv6 detection model already present
+  )
+
+  if not exist "%PADDLEOCR_DIR%\rec.onnx" (
+    echo Downloading PP-OCRv6_small_rec ONNX model...
+    powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx' -OutFile '%PADDLEOCR_DIR%\rec.onnx'"
+    echo Recognition model downloaded
+  ) else (
+    echo PP-OCRv6 recognition model already present
+  )
+
+  if not exist "%PADDLEOCR_DIR%\ppocr_keys_v6.txt" (
+    echo Extracting character dictionary from model inference.yml...
+    powershell -NoProfile -Command ^
+      "$url = 'https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.yml';" ^
+      "$yml = Invoke-WebRequest -UseBasicParsing -Uri $url;" ^
+      "$inDict = $false; $chars = @();" ^
+      "foreach ($line in ($yml.Content -split [char]10)) {" ^
+        "$s = $line.Trim();" ^
+        "if ($s -eq 'character_dict:') { $inDict = $true; continue };" ^
+        "if ($inDict) {" ^
+          "if ($s -match '^- ''(.*)''$') { $chars += $matches[1] };" ^
+          "elseif ($s -eq '' -or $s -notmatch '^- ') { break };" ^
+        "};" ^
+      "};" ^
+      "$chars | Out-File -FilePath '%PADDLEOCR_DIR%\ppocr_keys_v6.txt' -Encoding ascii"
+    echo Character dictionary downloaded
+  ) else (
+    echo Character dictionary already present
+  )
+)
+
+rem ── 8. Done ───────────────────────────────────────────────────────────
 echo.
 echo Bootstrap complete
 echo Run:  run.bat input.pdf -o output.pdf
 echo Build: gradlew build
+echo.
+echo Flags: --force         force re-download of all dependencies
+echo        --paddle   also download PP-OCRv6 ONNX models (~30 MB) for --ocr-engine paddle
 
 endlocal

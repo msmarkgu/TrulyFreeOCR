@@ -33,7 +33,7 @@ PADDLE=false
 for arg in "$@"; do
   case "$arg" in
     --force)         FORCE_DOWNLOAD=true  ;;
-    --paddle|--with-paddle) PADDLE=true   ;;
+    --paddle) PADDLE=true   ;;
   esac
 done
 if [ "$FORCE_DOWNLOAD" = true ]; then
@@ -295,4 +295,4 @@ echo "Run:  ./run.sh input.pdf -o output.pdf"
 echo "Build: ./gradlew build"
 echo ""
 echo "Flags: --force         force re-download of all dependencies"
-echo "       --with-paddle   also download PP-OCRv6 ONNX models (~30 MB) for --ocr-engine paddle"
+echo "       --paddle   also download PP-OCRv6 ONNX models (~30 MB) for --ocr-engine paddle"
