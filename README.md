@@ -38,7 +38,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 ## Why TrulyFreeOCR
 
-A survey of 20 open-source OCR projects (see [`docs/opensource-ocr-tools.md`](docs/opensource-ocr-tools.md)) found none that combine all five requirements for production document processing:
+A survey of 25+ open-source OCR projects (see [`docs/opensource-ocr-tools.md`](docs/opensource-ocr-tools.md)) found none that combine all five requirements for production document processing:
 
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
 - **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local; no sudo, no Python, no system deps
@@ -48,13 +48,15 @@ A survey of 20 open-source OCR projects (see [`docs/opensource-ocr-tools.md`](do
 
 Where other tools fall short:
 
-- **VLM models** ([DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [GLM-OCR](https://github.com/zai-org/GLM-OCR), [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), etc.) produce the best OCR accuracy but require GPUs and only emit JSON/Markdown — no PDF output at all.
+- **VLM models** ([DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [GLM-OCR](https://github.com/zai-org/GLM-OCR), [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), [Chandra OCR](https://github.com/chandra-ai/chandra-ocr), etc.) produce the best OCR accuracy but require GPUs and only emit JSON/Markdown — no PDF output at all.
 - **[OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF)** covers the full PDF pipeline but needs Ghostscript + Python + system deps; its MPL-2.0 license requires publishing modifications.
+- **[MinerU](https://github.com/opendatalab/MinerU)** is the most popular document extraction tool (74k★) but outputs Markdown/JSON only, requires Python + model downloads, and its custom license restricts deployments exceeding 100M MAU / $20M revenue.
 - **[Umi-OCR](https://github.com/hiroi-sora/Umi-OCR)** makes a nice desktop GUI but has no MRC compression, no PDF/A, and is Windows-focused.
 - **[NAPS2](https://github.com/cyanfish/naps2)** is a desktop scanning app with OCR, but uses GPL 2.0, requires .NET runtime, and has no MRC compression, no PDF/A, no headless server mode.
-- **[LlamaParse](https://github.com/run-llama/llama_index)** (LlamaIndex) is a cloud API with per-page costs, no offline mode, and no MRC/PDF/A output.
-- **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
-- **[surya](https://github.com/VikParuchuri/surya) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
+- **[paperless-ngx](https://github.com/paperless-ngx/paperless-ngx)** is a full self-hosted DMS with ML classification (42k★), but GPL-3.0 requires full application source disclosure, needs Django + DB + Redis, and lacks MRC compression and PDF/A.
+- **[LlamaParse](https://github.com/run-llama/llama_index)** (LlamaIndex) / **[Unstructured](https://github.com/Unstructured-IO/unstructured)** are cloud/ETL tools for LLM ingestion, with per-page costs (LlamaParse) or local Python deps, and produce JSON/Markdown — not searchable PDFs.
+- **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR) / [tesseract.js](https://github.com/naptha/tesseract.js)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
+- **[surya](https://github.com/VikParuchuri/surya) / [Marker](https://github.com/VikParuchuri/marker) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
 
 TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and no GPU required. Simply run the self-contained fat JAR, input a PDF or image, and get a highly compressed, fully searchable PDF out.
 
