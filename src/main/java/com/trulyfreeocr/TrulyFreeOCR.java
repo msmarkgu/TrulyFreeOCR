@@ -49,6 +49,7 @@ import com.trulyfreeocr.model.TextBlock;
 import com.trulyfreeocr.pipeline.ImageSegmenter;
 import com.trulyfreeocr.pipeline.JBIG2Compressor;
 import com.trulyfreeocr.pipeline.OcrProvider;
+import com.trulyfreeocr.pipeline.PaddleOcrOnnxProvider;
 import com.trulyfreeocr.pipeline.TesseractProvider;
 import com.trulyfreeocr.pipeline.PDFAssembler;
 import com.trulyfreeocr.util.Settings;
@@ -167,7 +168,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     );
                     break;
                 case "paddle":
-                    throw new UnsupportedOperationException("PaddleOCR engine not yet implemented");
+                    ocrProvider = new PaddleOcrOnnxProvider();
+                    break;
                 default:
                     throw new IllegalArgumentException("Unknown OCR engine: " + ocrEngine);
             }

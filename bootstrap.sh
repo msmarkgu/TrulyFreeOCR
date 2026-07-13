@@ -27,13 +27,20 @@ case "$DEB_ARCH" in
          DEB_ARCH="amd64"; LIB_ARCH="x86_64-linux-gnu" ;;
 esac
 
-# ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
-# Add --force flag to force re-download all dependencies
+# ── Flag parsing ────────────────────────────────────────────────────────────
 FORCE_DOWNLOAD=false
-if [ "$#" -gt 0 ] && [ "$1" = "--force" ]; then
-  FORCE_DOWNLOAD=true
+PADDLE=false
+for arg in "$@"; do
+  case "$arg" in
+    --force)         FORCE_DOWNLOAD=true  ;;
+    --paddle|--with-paddle) PADDLE=true   ;;
+  esac
+done
+if [ "$FORCE_DOWNLOAD" = true ]; then
   echo "Forcing re-download of all dependencies..."
 fi
+
+# ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
 
 JDK_DIR="$SCRIPT_DIR/deps/jdk"
 mkdir -p "$JDK_DIR"
@@ -218,7 +225,60 @@ WRAPPER
   echo "Created jbig2enc wrapper at $JBIG2ENC_DIR/jbig2enc"
 fi
 
-# ── 6. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# ── 6. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──────
+if [ "$PADDLE" = true ]; then
+  PADDLEOCR_DIR="$SCRIPT_DIR/deps/paddleocr"
+  mkdir -p "$PADDLEOCR_DIR"
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/det.onnx" ]; then
+    echo "Downloading PP-OCRv6_small_det ONNX model..."
+    curl -fsSL -o "$PADDLEOCR_DIR/det.onnx" \
+      "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx"
+    echo "Detection model downloaded ($(du -h "$PADDLEOCR_DIR/det.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6 detection model already present"
+  fi
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/rec.onnx" ]; then
+    echo "Downloading PP-OCRv6_small_rec ONNX model..."
+    curl -fsSL -o "$PADDLEOCR_DIR/rec.onnx" \
+      "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx"
+    echo "Recognition model downloaded ($(du -h "$PADDLEOCR_DIR/rec.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6 recognition model already present"
+  fi
+
+  # Download and extract character dictionary from model's inference.yml
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/ppocr_keys_v6.txt" ]; then
+    echo "Extracting character dictionary from model inference.yml..."
+    # Write extraction script to temp file to avoid quoting issues
+    PYEXTRACT=$(mktemp)
+    cat > "$PYEXTRACT" << 'PYEOF'
+import sys
+in_dict = False
+for line in sys.stdin:
+    if 'character_dict:' in line:
+        in_dict = True
+        continue
+    if in_dict:
+        s = line.strip()
+        if not s.startswith('- '):
+            break
+        val = s[2:]
+        if val.startswith("'") and val.endswith("'"):
+            inner = val[1:-1].replace("''", "'")
+            print(inner)
+PYEOF
+    curl -fsSL "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.yml" \
+      | python3 "$PYEXTRACT" > "$PADDLEOCR_DIR/ppocr_keys_v6.txt"
+    rm -f "$PYEXTRACT"
+    echo "Character dictionary downloaded ($(wc -l < "$PADDLEOCR_DIR/ppocr_keys_v6.txt") chars)"
+  else
+    echo "Character dictionary already present"
+  fi
+fi
+
+# ── 7. Download jbig2enc (macOS only) ──────────────────────────────────────────
 # Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
   mac)
@@ -228,8 +288,11 @@ case "$OS" in
     ;;
 esac
 
-# ── 7. Build project ────────────────────────────────────────────────────────
+# ── 8. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"
 echo "Build: ./gradlew build"
+echo ""
+echo "Flags: --force         force re-download of all dependencies"
+echo "       --with-paddle   also download PP-OCRv6 ONNX models (~30 MB) for --ocr-engine paddle"
