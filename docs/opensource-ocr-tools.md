@@ -8,54 +8,54 @@ self-contained deployment, and Java portability.
 
 ---
 
-## Project Matrix — Traditional OCR & PDF Tools
+## Traditional OCR & PDF Tools
 
-| Feature | TrulyFreeOCR | OCRmyPDF | archive-pdf-tools | pdf2pdfocr | Docling | PaddleOCR |
-|---|---|---|---|---|---|---|
-| **Language** | Java 21 (pure) | Python | Python | Python | Python | Python / C++ |
-| **License** | Apache 2.0 | MPL-2.0 | AGPL-3.0 | Apache 2.0 | MIT | Apache 2.0 |
-| **GitHub Stars** | — | ~29k | ~140 | ~300 | ~62k | ~84k |
-| **OCR Engine** | Tesseract 5 CLI | Tesseract 5 | Tesseract 5 | Tesseract | Tesseract / pluggable | PaddleOCR (own) |
-| **MRC Compression** | Yes (PNG bg + JBIG2/G4 fg) | Yes (via `--optimize`) | Yes (JPEG2000 + JBIG2) | No | No (extraction only) | No |
-| **Self-Contained** | Yes (single JAR) | No | No | No | No | No |
-| **PDF/A** | Yes (2b) | Yes (1b/2b/3b) | Yes (3b) | No | Extraction only | No |
-| **No Native Deps** | Only Tesseract | Ghostscript + Tesseract | Kakadu/OpenJPEG + MuPDF | pdftk + qpdf + gs | Models at runtime | PyTorch / GPU |
-| **Image Preprocessing** | Otsu + background norm. | Deskew, clean, rotate | Sauvola binarization | None | Vision-based layout | DL-based |
-| **Concurrent OCR** | Optional (configurable) | Yes (multi-core) | Yes | Yes | Yes (batching) | Yes (GPU batch) |
-| **Language Support** | 20 languages | 100+ languages | 100+ languages | 100+ languages | 100+ languages | 100+ languages |
-| **CLI Interface** | picocli | argparse | Custom | argparse | Typer | Custom |
-| **Active Development** | Yes | Yes (v17.7.0) | Stale (2021) | Low (2023) | Yes (v2.x) | Yes (v3.7.0) |
+| Feature | TrulyFreeOCR | OCRmyPDF | archive-pdf-tools | pdf2pdfocr | Docling | PaddleOCR | MinerU | Marker |
+|---|---|---|---|---|---|---|---|---|
+| **Language** | Java 21 (pure) | Python | Python | Python | Python | Python / C++ | Python | Python |
+| **License** | Apache 2.0 | MPL-2.0 | AGPL-3.0 | Apache 2.0 | MIT | Apache 2.0 | Apache 2.0 + custom terms | GPL-3.0 |
+| **GitHub Stars** | — | ~29k | ~140 | ~300 | ~62k | ~84k | ~74k | ~20k |
+| **OCR Engine** | Tesseract 5 CLI | Tesseract 5 | Tesseract 5 | Tesseract | Tesseract / pluggable | PaddleOCR (own) | MinerU (own) | surya + Tesseract |
+| **MRC Compression** | Yes (PNG bg + JBIG2/G4 fg) | Yes (via `--optimize`) | Yes (JPEG2000 + JBIG2) | No | No (extraction only) | No | No | No |
+| **Self-Contained** | Yes (single JAR) | No | No | No | No | No | No | No |
+| **PDF/A** | Yes (2b) | Yes (1b/2b/3b) | Yes (3b) | No | Extraction only | No | No | No |
+| **No Native Deps** | Only Tesseract | Ghostscript + Tesseract | Kakadu/OpenJPEG + MuPDF | pdftk + qpdf + gs | Models at runtime | PyTorch / GPU | Models at runtime | Models at runtime |
+| **Image Preprocessing** | Otsu + background norm. | Deskew, clean, rotate | Sauvola binarization | None | Vision-based layout | DL-based | Layout analysis | Layout analysis |
+| **Concurrent OCR** | Optional (configurable) | Yes (multi-core) | Yes | Yes | Yes (batching) | Yes (GPU batch) | Yes (batching) | Yes |
+| **Language Support** | 20 languages | 100+ languages | 100+ languages | 100+ languages | 100+ languages | 100+ languages | 109 languages | 90+ languages |
+| **CLI Interface** | picocli | argparse | Custom | argparse | Typer | Custom | Custom | Custom |
+| **Active Development** | Yes | Yes (v17.7.0) | Stale (2021) | Low (2023) | Yes (v2.x) | Yes (v3.7.0) | Yes (v1.x) | Yes (v1.x) |
 
-## Project Matrix — VLM / End-to-End OCR Models
+## Vision Language Model (VLM) / End-to-End OCR Models
 
-| Feature | DeepSeek-OCR | GOT-OCR2.0 | GLM-OCR | MonkeyOCR | Unlimited-OCR | olmOCR |
-|---|---|---|---|---|---|---|
-| **Language** | Python | Python | Python | Python | Python | Python |
-| **License** | MIT | Apache 2.0 (code), research-only (weights) | MIT (model), Apache 2.0 (code) | Alibaba non-commercial (weights), Apache 2.0 (code) | MIT | Apache 2.0 |
-| **GitHub Stars** | ~23k | ~8k | ~7k | ~6k | ~11k | ~4k |
-| **OCR Engine** | VLM (3B) | VLM (580M) | VLM (0.9B) | VLM (1.2B / 3B) | VLM (3B) | VLM (7B) |
-| **MRC Compression** | No | No | No | No | No | No |
-| **Self-Contained** | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) |
-| **PDF/A** | No | No | No | No | No | No |
-| **Output Format** | Plain text | Plain / formatted text | Markdown / JSON | Markdown / JSON | Markdown | Plain text |
-| **GPU Required** | Yes (A100-40G) | Yes (24GB+) | Yes (4GB VRAM) | Yes (3090+) | Yes (24GB+) | Yes (FP8) |
-| **Speed** | ~2500 tokens/s (A100) | — | 1.86 pages/s | ~1 page/s (4090) | 1+ page/s (A100) | — |
-| **Active Development** | Yes (Oct 2025) | Moderate (2024) | Yes (Feb 2026) | Yes (Jun 2025) | Yes (Jun 2026) | Low (2025) |
+| Feature | DeepSeek-OCR | GOT-OCR2.0 | GLM-OCR | MonkeyOCR | Unlimited-OCR | olmOCR | Chandra OCR |
+|---|---|---|---|---|---|---|---|
+| **Language** | Python | Python | Python | Python | Python | Python | Python |
+| **License** | MIT | Apache 2.0 (code), research-only (weights) | MIT (model), Apache 2.0 (code) | Alibaba non-commercial (weights), Apache 2.0 (code) | MIT | Apache 2.0 | Apache 2.0 (code), modified OpenRAIL-M (weights) |
+| **GitHub Stars** | ~23k | ~8k | ~7k | ~6k | ~11k | ~4k | ~11.5k |
+| **OCR Engine** | VLM (3B) | VLM (580M) | VLM (0.9B) | VLM (1.2B / 3B) | VLM (3B) | VLM (7B) | VLM (4B) |
+| **MRC Compression** | No | No | No | No | No | No | No |
+| **Self-Contained** | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) | No (Python + GPU) |
+| **PDF/A** | No | No | No | No | No | No | No |
+| **Output Format** | Plain text | Plain / formatted text | Markdown / JSON | Markdown / JSON | Markdown | Plain text | Markdown / JSON |
+| **GPU Required** | Yes (A100-40G) | Yes (24GB+) | Yes (4GB VRAM) | Yes (3090+) | Yes (24GB+) | Yes (FP8) | Yes (24GB+) |
+| **Speed** | ~2500 tokens/s (A100) | — | 1.86 pages/s | ~1 page/s (4090) | 1+ page/s (A100) | — | ~1 page/s |
+| **Active Development** | Yes (Oct 2025) | Moderate (2024) | Yes (Feb 2026) | Yes (Jun 2025) | Yes (Jun 2026) | Low (2025) | Yes (2026) |
 
-## Project Matrix — DL OCR Toolkits & Desktop Tools
+## Deep Learning OCR Toolkits & Desktop Tools
 
-| Feature | EasyOCR | surya | docTR | RapidOCR | Umi-OCR | NAPS2 | PandaOCR | SwiftOCR | llama_index |
-|---|---|---|---|---|---|---|---|---|---|
-| **Language** | Python | Python | Python | Python / C++ / Java / C# | Python + QML | C# (.NET) | AutoIt / Pascal | Swift | Python / TypeScript |
-| **License** | Apache 2.0 | Apache 2.0 (code), OpenRAIL-M (weights) | Apache 2.0 | Apache 2.0 | MIT | GPL 2.0 | Custom freeware | Apache 2.0 | MIT |
-| **GitHub Stars** | ~30k | ~30k | ~6k | ~7k | ~46k | ~4.3k | ~5k | ~5k | ~50k |
-| **OCR Engine** | CRAFT + CRNN (PyTorch) | Own VLM (650M) | DBNet + CRNN / ViT | PaddleOCR → ONNX | PaddleOCR / RapidOCR | Tesseract | Cloud API aggregator | NN (Swift) | LlamaParse (cloud) |
-| **MRC Compression** | No | No | No | No | Basic (dual-layer PDF) | No | No | No | No |
-| **Self-Contained** | No (Python + PyTorch) | No (Python + GPU) | No (Python + PyTorch) | No (Python) | Yes (exe + runtime) | Portable archive | Yes (Windows exe) | Yes (Swift pkg) | No (Python / cloud API) |
-| **PDF/A** | No | No | No | No | No | No | No | No | No |
-| **Searchable PDF** | No | No | No | No | Yes (basic dual-layer) | Yes (via OCR) | No | No | No |
-| **Concurrent OCR** | Yes (GPU batch) | Yes (GPU batch) | Yes (GPU batch) | Yes | Yes | No | N/A (sequential) | No | Yes (cloud) |
-| **Active Development** | Moderate (v1.7.2) | Yes (v0.20.0) | Moderate | Yes (v3.9.0) | Yes (v2.1.5) | Yes (v8.2.1) | Yes (Pro v5.59) | Deprecated (2020) | Yes (weekly) |
+| Feature | EasyOCR | surya | docTR | RapidOCR | Umi-OCR | NAPS2 | PandaOCR | SwiftOCR | llama_index | tesseract.js | paperless-ngx | Unstructured |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Language** | Python | Python | Python | Python / C++ / Java / C# | Python + QML | C# (.NET) | AutoIt / Pascal | Swift | Python / TypeScript | JavaScript / Node | Python + Django | Python |
+| **License** | Apache 2.0 | Apache 2.0 (code), OpenRAIL-M (weights) | Apache 2.0 | Apache 2.0 | MIT | GPL 2.0 | Custom freeware | Apache 2.0 | MIT | Apache 2.0 | GPL-3.0 | Apache 2.0 |
+| **GitHub Stars** | ~30k | ~30k | ~6k | ~7k | ~46k | ~4.3k | ~5k | ~5k | ~50k | ~36k | ~42k | ~10k |
+| **OCR Engine** | CRAFT + CRNN (PyTorch) | Own VLM (650M) | DBNet + CRNN / ViT | PaddleOCR → ONNX | PaddleOCR / RapidOCR | Tesseract | Cloud API aggregator | NN (Swift) | LlamaParse (cloud) | Tesseract (WASM) | Tesseract | Tesseract / pluggable |
+| **MRC Compression** | No | No | No | No | Basic (dual-layer PDF) | No | No | No | No | No | No | No |
+| **Self-Contained** | No (Python + PyTorch) | No (Python + GPU) | No (Python + PyTorch) | No (Python) | Yes (exe + runtime) | Portable archive | Yes (Windows exe) | Yes (Swift pkg) | No (Python / cloud API) | Yes (npm package) | No (Python + web server) | No (Python) |
+| **PDF/A** | No | No | No | No | No | No | No | No | No | No | No | No |
+| **Searchable PDF** | No | No | No | No | Yes (basic dual-layer) | Yes (via OCR) | No | No | No | No | Yes | No |
+| **Concurrent OCR** | Yes (GPU batch) | Yes (GPU batch) | Yes (GPU batch) | Yes | Yes | No | N/A (sequential) | No | Yes (cloud) | Yes (workers) | Yes (celery) | Yes (batching) |
+| **Active Development** | Moderate (v1.7.2) | Yes (v0.20.0) | Moderate | Yes (v3.9.0) | Yes (v2.1.5) | Yes (v8.2.1) | Yes (Pro v5.59) | Deprecated (2020) | Yes (weekly) | Moderate | Yes (v2.x) | Yes |
 
 ---
 
@@ -333,6 +333,85 @@ self-contained deployment, and Java portability.
   space.  If users want cloud OCR with RAG pipelines, LlamaParse is the best
   option; if they need offline batch PDF production with MRC compression, we
   provide that.
+
+### MinerU (opendatalab/MinerU)
+- **License**: Apache 2.0 + custom terms (free for <100M MAU / <$20M revenue).
+- **Strengths**: PDF/DOCX/PPTX/XLSX to Markdown/JSON.  Layout analysis with
+  layout detection + formula/table extraction.  109 languages.  CLI, API, and
+  WebUI.  Very popular (~74k stars).  Active development.
+- **Weaknesses**: Python + model downloads required.  No searchable PDF output.
+  No MRC compression.  No PDF/A.  Custom license terms restrict very large
+  commercial deployments.
+- **Relevance**: The most popular document extraction tool.  Complementary in
+  purpose — MinerU converts to Markdown/JSON for RAG, while we produce
+  archive-quality searchable PDFs.  A `--extract-json` mode in our tool could
+  learn from MinerU's layout pipeline.
+
+### Marker (VikParuchuri/marker)
+- **License**: GPL-3.0 — strong copyleft, incompatible with commercial
+  integration without disclosing entire application source.
+- **Strengths**: PDF to Markdown with high accuracy.  Uses surya for layout
+  analysis and Tesseract for OCR.  GPU and CPU support.  Handles tables, code
+  blocks, images.  Good reading order preservation.
+- **Weaknesses**: GPL-3.0 is a non-starter for commercial use.  No searchable
+  PDF output.  No MRC compression.  Python + model dependencies.  Focused on
+  extraction, not PDF production.
+- **Relevance**: Demonstrates the surya + Tesseract combination for high-quality
+  extraction.  If we ever add a pluggable backend, surya-powered layout analysis
+  (as used by Marker) would be a strong candidate for structure preservation.
+
+### Chandra OCR (chandra-ai/chandra-ocr)
+- **License**: Apache 2.0 (code), modified OpenRAIL-M (weights — free for
+  research and startups under $2M revenue/funding).
+- **Strengths**: 4B param VLM scoring 85.9% on olmOCR-bench.  Handles
+  handwriting, tables, layout, reading order.  43 languages.  Designed for
+  high-throughput document processing.
+- **Weaknesses**: Python + GPU (24GB+) required.  Modified OpenRAIL-M weight
+  license restricts commercial use beyond startup scale.  No searchable PDF
+  output.  No MRC compression.  Very new (2026).
+- **Relevance**: Among the most accurate VLM OCR models available.  Its 4B
+  parameter size and strong benchmark scores make it a compelling candidate for
+  a future pluggable VLM backend once weight licensing becomes more permissive.
+
+### tesseract.js (naptha/tesseract.js)
+- **License**: Apache 2.0 — same as ours.
+- **Strengths**: Tesseract OCR running in the browser and Node.js via WebAssembly.
+  100+ languages.  No native dependencies — pure JavaScript.  Simple API.
+  Very popular (~36k stars).  Works offline (once models are loaded).
+- **Weaknesses**: Slower than native Tesseract (WASM overhead).  No searchable
+  PDF output.  No MRC compression.  Browser-focused (limited CLI/server use).
+  Inherits Tesseract's limitations (no layout analysis, poor handwriting).
+- **Relevance**: Proves that Tesseract can run in non-traditional environments.
+  Our Java subprocess approach offers better performance, but tesseract.js shows
+  demand for OCR in JS/Node ecosystems.
+
+### paperless-ngx (paperless-ngx/paperless-ngx)
+- **License**: GPL-3.0 — strong copyleft.
+- **Strengths**: Full-featured self-hosted document management system.  Tesseract
+  OCR with ML-based classification and tagging.  REST API, web UI, consumer
+  directory (watched folder).  Django + Celery for scalable background
+  processing.  Very popular (~42k stars).  Active development (v2.x).
+- **Weaknesses**: GPL-3.0 restricts commercial embedding.  Full stack
+  (Django + DB + Redis + web server) — not self-contained.  No MRC compression.
+  No PDF/A.  Designed as a DMS, not a batch OCR tool.
+- **Relevance**: The most popular self-hosted DMS with OCR.  Demonstrates
+  demand for automated document processing.  Our tool targets the OCR+PDF
+  pipeline layer — complementary to paperless-ngx's DMS features.  paperless-ngx
+  could use TrulyFreeOCR as its OCR backend for MRC-compressed output.
+
+### Unstructured (Unstructured-IO/unstructured)
+- **License**: Apache 2.0 — business-friendly.
+- **Strengths**: Document ETL for LLM/RAG pipelines.  Multi-format partitioning
+  (PDF, DOCX, HTML, images, etc.).  Table extraction, chunking, cleaning.
+  Cloud API and local modes.  Connectors for S3, Azure, Google Drive, etc.
+  Active development (~10k stars).
+- **Weaknesses**: Python + model downloads for local mode.  No searchable PDF
+  output.  No MRC compression.  No PDF/A.  Focused on extraction for LLM
+  ingestion, not archive-quality PDF production.  Cloud API has usage costs.
+- **Relevance**: Unstructured is the standard tool for preparing documents for
+  RAG pipelines.  Our tool addresses the complementary problem — producing
+  compressed, searchable, PDF/A-compliant archives.  A user needing both would
+  use Unstructured for LLM ingestion and TrulyFreeOCR for archival PDF output.
 
 ---
 
