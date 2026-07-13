@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -18,25 +20,38 @@ import ai.onnxruntime.OrtSession;
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
 
+/**
+ * OCR provider using PP-OCRv6_small ONNX models (detection + recognition).
+ * Detection: DBNet (Differentiable Binarization) with orientation-aware post-processing.
+ * Recognition: CRNN + CTC decode with per-model character dictionary.
+ */
 public class PaddleOcrOnnxProvider implements OcrProvider {
 
     private static final String MODEL_DIR = "deps/paddleocr";
     private static final String DET_MODEL = "det.onnx";
     private static final String REC_MODEL = "rec.onnx";
 
-    // Detection preprocessing
+    // Max side for detection input image; larger images are scaled down to this limit.
     private static final int DET_LIMIT_SIDE = 960;
     private static final String DET_LIMIT_TYPE = "max";
 
-    // DB post-processing
+    // DB binarization threshold — pixels above this are considered text.
     private static final float DET_THRESH = 0.3f;
+    // Average probability threshold for a connected component to be kept as a text box.
     private static final float BOX_THRESH = 0.6f;
+    // Expansion ratio applied to text contours during box unclipping.
     private static final float UNCLIP_RATIO = 1.5f;
+    // Minimum box dimension in the probability map (pixels in resized space).
     private static final int MIN_SIZE = 3;
 
-    // Recognition
+    // Recognition input height (fixed). Width is dynamic to preserve aspect ratio.
     private static final int REC_HEIGHT = 48;
+    // Maximum allowed recognition input width.
     private static final int REC_MAX_WIDTH = 3200;
+    // Maximum crops per batched recognition call.
+    private static final int REC_BATCH_SIZE = 6;
+    // Minimum ratio (narrowest/widest) for crops grouped in the same batch.
+    private static final float REC_BATCH_WIDTH_RATIO = 0.6f;
 
     private final OrtEnvironment env;
     private final OrtSession detSession;
@@ -49,6 +64,11 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
 
     private final List<String> charDict;
 
+    /**
+     * Loads PP-OCRv6 ONNX models and character dictionary.
+     * Detection model is required; recognition model and dict are optional
+     * (fallback yields axis-aligned boxes without text labels).
+     */
     public PaddleOcrOnnxProvider() throws IOException {
         try {
             env = OrtEnvironment.getEnvironment();
@@ -103,7 +123,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         return dict;
     }
 
-    // ── OcrProvider ──────────────────────────────────────────────────────────
+    // ── OcrProvider Interface ─────────────────────────────────────────────────
 
     @Override
     public PageResult ocr(BufferedImage pageImage, int pageIndex) throws IOException {
@@ -128,7 +148,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         List<TextBlock> blocks = new ArrayList<>(sorted.size());
         for (int i = 0; i < sorted.size(); i++) {
             DetBox box = sorted.get(i);
-            Rectangle r = new Rectangle(box.x, box.y, box.w, box.h);
+            Rectangle r = polygonBbox(box);
             blocks.add(new TextBlock(texts.get(i), r, box.confidence));
         }
 
@@ -137,14 +157,26 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
 
     // ── Detection Pipeline ───────────────────────────────────────────────────
 
+    /**
+     * Axis-aligned bounding box with optional oriented polygon for perspective-aware cropping.
+     * polyX/polyY are non-null only for elongated components (e.g., text lines).
+     */
     private static class DetBox {
         int x, y, w, h;
+        int[] polyX, polyY;
         float confidence;
-        DetBox(int x, int y, int w, int h, float confidence) {
-            this.x = x; this.y = y; this.w = w; this.h = h; this.confidence = confidence;
+        DetBox(int x, int y, int w, int h, float confidence,
+               int[] polyX, int[] polyY) {
+            this.x = x; this.y = y; this.w = w; this.h = h;
+            this.confidence = confidence;
+            this.polyX = polyX; this.polyY = polyY;
         }
     }
 
+    /**
+     * Runs DBNet detection: resize → normalize → ONNX inference → binarization
+     * → connected components → oriented box computation.
+     */
     private List<DetBox> detect(BufferedImage image) throws IOException {
         int origW = image.getWidth();
         int origH = image.getHeight();
@@ -228,8 +260,12 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         return input;
     }
 
-    // ── DB Postprocessing ────────────────────────────────────────────────────
+    // ── DB Post-processing ────────────────────────────────────────────────────
 
+    /**
+     * Converts DBNet probability map into DetBox list via thresholding,
+     * connected-component labelling, and oriented box fitting.
+     */
     private static List<DetBox> dbPostprocess(float[][] probMap, int mapW, int mapH,
                                                float scaleX, float scaleY) {
         int h = probMap.length;
@@ -345,6 +381,8 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         float sumProb = 0;
         int count = 0;
 
+        // First pass: collect stats for axis-aligned box + PCA
+        double sumX = 0, sumY = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 if (labels[y][x] == targetLabel) {
@@ -353,6 +391,8 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
                     if (x > maxX) maxX = x;
                     if (y > maxY) maxY = y;
                     sumProb += probMap[y][x];
+                    sumX += x;
+                    sumY += y;
                     count++;
                 }
             }
@@ -372,6 +412,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         if (perimeter < 1) return null;
         float distance = area * UNCLIP_RATIO / perimeter;
 
+        // ── Axis-aligned unclip (always computed) ──
         int pad = Math.round(distance);
         minX = Math.max(0, minX - pad);
         minY = Math.max(0, minY - pad);
@@ -386,54 +427,294 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         int origW = Math.round((maxX - minX + 1) * probScaleX);
         int origH = Math.round((maxY - minY + 1) * probScaleY);
 
-        return new DetBox(origX, origY, origW, origH, confidence);
+        // ── Oriented polygon (only for elongated components, e.g. text lines) ──
+        // Width >> height indicates a text line where perspective crop helps.
+        int[] polyX = null;
+        int[] polyY = null;
+        if (boxW > boxH * 2) {
+            double cx = sumX / count;
+            double cy = sumY / count;
+            double xx = 0, yy = 0, xy = 0;
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    if (labels[y][x] == targetLabel) {
+                        double dx = x - cx;
+                        double dy = y - cy;
+                        xx += dx * dx;
+                        yy += dy * dy;
+                        xy += dx * dy;
+                    }
+                }
+            }
+            xx /= count; yy /= count; xy /= count;
+
+            double theta = 0.5 * Math.atan2(2 * xy, xx - yy);
+            double cosA = Math.cos(theta);
+            double sinA = Math.sin(theta);
+
+            double minU = Double.MAX_VALUE, maxU = -Double.MAX_VALUE;
+            double minV = Double.MAX_VALUE, maxV = -Double.MAX_VALUE;
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    if (labels[y][x] == targetLabel) {
+                        double u = (x - cx) * cosA + (y - cy) * sinA;
+                        double v = -(x - cx) * sinA + (y - cy) * cosA;
+                        if (u < minU) minU = u;
+                        if (u > maxU) maxU = u;
+                        if (v < minV) minV = v;
+                        if (v > maxV) maxV = v;
+                    }
+                }
+            }
+
+            minU -= distance;
+            maxU += distance;
+            minV -= distance;
+            maxV += distance;
+
+            double[][] uv = {{minU, minV}, {maxU, minV}, {maxU, maxV}, {minU, maxV}};
+            polyX = new int[4];
+            polyY = new int[4];
+            for (int i = 0; i < 4; i++) {
+                double px = cx + uv[i][0] * cosA - uv[i][1] * sinA;
+                double py = cy + uv[i][0] * sinA + uv[i][1] * cosA;
+                polyX[i] = Math.round((float) (px * probScaleX));
+                polyY[i] = Math.round((float) (py * probScaleY));
+            }
+        }
+
+        return new DetBox(origX, origY, origW, origH, confidence, polyX, polyY);
     }
 
-    // ── Reading Order Sort ───────────────────────────────────────────────────
+    // ── Reading-Order Sort ───────────────────────────────────────────────────
 
     private static List<DetBox> sortBoxesReadingOrder(List<DetBox> boxes) {
         List<DetBox> sorted = new ArrayList<>(boxes);
         sorted.sort((a, b) -> {
-            int midY_a = a.y + a.h / 2;
-            int midY_b = b.y + b.h / 2;
-            if (Math.abs(midY_a - midY_b) > Math.min(a.h, b.h) / 2) {
-                return Integer.compare(midY_a, midY_b);
+            double midY_a = boxCenterY(a);
+            double midY_b = boxCenterY(b);
+            double avgH = (bboxHeight(a) + bboxHeight(b)) / 2.0;
+            if (Math.abs(midY_a - midY_b) > avgH / 2) {
+                return Double.compare(midY_a, midY_b);
             }
-            return Integer.compare(a.x, b.x);
+            return Double.compare(boxCenterX(a), boxCenterX(b));
         });
         return sorted;
     }
 
+    private static Rectangle polygonBbox(DetBox box) {
+        int[] polyX = box.polyX;
+        int[] polyY = box.polyY;
+        if (polyX == null) {
+            return new Rectangle(box.x, box.y, box.w, box.h);
+        }
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE;
+        for (int i = 0; i < 4; i++) {
+            if (polyX[i] < minX) minX = polyX[i];
+            if (polyY[i] < minY) minY = polyY[i];
+            if (polyX[i] > maxX) maxX = polyX[i];
+            if (polyY[i] > maxY) maxY = polyY[i];
+        }
+        return new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    private static double boxCenterX(DetBox b) {
+        if (b.polyX != null) {
+            return (b.polyX[0] + b.polyX[1] + b.polyX[2] + b.polyX[3]) / 4.0;
+        }
+        return b.x + b.w / 2.0;
+    }
+
+    private static double boxCenterY(DetBox b) {
+        if (b.polyY != null) {
+            return (b.polyY[0] + b.polyY[1] + b.polyY[2] + b.polyY[3]) / 4.0;
+        }
+        return b.y + b.h / 2.0;
+    }
+
+    private static double bboxHeight(DetBox b) {
+        if (b.polyY != null) {
+            int minY = Math.min(Math.min(b.polyY[0], b.polyY[1]), Math.min(b.polyY[2], b.polyY[3]));
+            int maxY = Math.max(Math.max(b.polyY[0], b.polyY[1]), Math.max(b.polyY[2], b.polyY[3]));
+            return maxY - minY + 1;
+        }
+        return b.h;
+    }
+
     // ── Recognition Pipeline ─────────────────────────────────────────────────
 
+    /**
+     * Runs CRNN recognition on each crop, batching similar-width crops together
+     * to minimize padding artifacts. Returns text labels in box order.
+     */
     private List<String> recognize(BufferedImage image, List<DetBox> boxes) throws IOException {
-        List<String> texts = new ArrayList<>(boxes.size());
-        for (DetBox box : boxes) {
-            BufferedImage crop = cropBox(image, box);
+        int n = boxes.size();
+        if (n == 0) return new ArrayList<>();
+
+        // Preprocess all crops and record widths
+        List<float[][][][]> preproc = new ArrayList<>(n);
+        int[] widths = new int[n];
+        for (int i = 0; i < n; i++) {
+            BufferedImage crop = cropPerspective(image, boxes.get(i));
             if (crop == null) {
-                texts.add("");
+                preproc.add(null);
+                widths[i] = 0;
+            } else {
+                float[][][][] tensor = recPreprocess(crop);
+                preproc.add(tensor);
+                widths[i] = tensor[0][0][0].length;
+            }
+        }
+
+        // Sort indices by width (ascending, nulls last)
+        Integer[] order = new Integer[n];
+        for (int i = 0; i < n; i++) order[i] = i;
+        Arrays.sort(order, Comparator.comparingInt(i -> widths[i] > 0 ? widths[i] : Integer.MAX_VALUE));
+
+        String[] results = new String[n];
+
+        // Greedy batching: group crops by width similarity to minimize padding artifacts
+        int start = 0;
+        while (start < n) {
+            int end = start;
+            int batchMinW = Integer.MAX_VALUE;
+            int batchMaxW = 0;
+            while (end < n && end - start < REC_BATCH_SIZE) {
+                int idx = order[end];
+                if (preproc.get(idx) == null) {
+                    end++;
+                    continue;
+                }
+                int w = widths[idx];
+                if (batchMinW == Integer.MAX_VALUE) {
+                    batchMinW = w;
+                    batchMaxW = w;
+                } else {
+                    int newMax = Math.max(batchMaxW, w);
+                    if (batchMinW < newMax * REC_BATCH_WIDTH_RATIO) {
+                        break; // new crop too wide relative to batch minimum
+                    }
+                    batchMaxW = newMax;
+                }
+                end++;
+            }
+
+            // Process this batch
+            int batchSize = end - start;
+            int validCount = 0;
+            for (int j = start; j < end; j++) {
+                if (preproc.get(order[j]) != null) validCount++;
+            }
+
+            if (validCount == 0) {
+                for (int j = start; j < end; j++) results[order[j]] = "";
+                start = end;
                 continue;
             }
 
-            float[][][][] inputTensor = recPreprocess(crop);
+            // Create batch tensor, zero-initialized (which is gray in [-1,1] space)
+            float[][][][] batch = new float[batchSize][3][REC_HEIGHT][batchMaxW];
+            for (int j = start; j < end; j++) {
+                int idx = order[j];
+                float[][][][] src = preproc.get(idx);
+                if (src == null) continue;
+                int srcW = widths[idx];
+                for (int c = 0; c < 3; c++) {
+                    for (int y = 0; y < REC_HEIGHT; y++) {
+                        System.arraycopy(src[0][c][y], 0, batch[j - start][c][y], 0, srcW);
+                    }
+                }
+            }
 
-            float[][] logits;
-            try (OnnxTensor tensor = OnnxTensor.createTensor(env, inputTensor);
+            // Run batched inference
+            float[][][] rawOutput;
+            try (OnnxTensor tensor = OnnxTensor.createTensor(env, batch);
                  OrtSession.Result result = recSession.run(Map.of(recInputName, tensor))) {
-
-                float[][][] raw = (float[][][]) result.get(recOutputName).get().getValue();
-                logits = raw[0]; // [T, vocab_size]
+                rawOutput = (float[][][]) result.get(recOutputName).get().getValue();
             } catch (OrtException e) {
                 throw new IOException("ONNX recognition inference failed", e);
             }
 
-            String text = ctcDecode(logits, charDict);
-            texts.add(text);
+            // Decode each result; filter out very short text (likely false positives)
+            for (int j = start; j < end; j++) {
+                int idx = order[j];
+                if (preproc.get(idx) != null) {
+                    String text = ctcDecode(rawOutput[j - start], charDict);
+                    results[idx] = text.length() <= 2 ? "" : text;
+                } else {
+                    results[idx] = "";
+                }
+            }
+
+            start = end;
         }
-        return texts;
+
+        return Arrays.asList(results);
     }
 
-    private static BufferedImage cropBox(BufferedImage image, DetBox box) {
+    /**
+     * Crops and deskews an oriented text region by rotating the polygon
+     * upright via affine transform with bilinear interpolation.
+     * Falls back to axis-aligned crop for boxes without polygon data.
+     */
+    private static BufferedImage cropPerspective(BufferedImage image, DetBox box) {
+        if (box.polyX == null) {
+            return cropBoxAligned(image, box);
+        }
+        int[] px = box.polyX;
+        int[] py = box.polyY;
+
+        // Destination dimensions from polygon side lengths
+        double topW = Math.sqrt(
+            (px[1] - px[0]) * (px[1] - px[0]) + (py[1] - py[0]) * (py[1] - py[0]));
+        double botW = Math.sqrt(
+            (px[3] - px[2]) * (px[3] - px[2]) + (py[3] - py[2]) * (py[3] - py[2]));
+        double leftH = Math.sqrt(
+            (px[3] - px[0]) * (px[3] - px[0]) + (py[3] - py[0]) * (py[3] - py[0]));
+        double rightH = Math.sqrt(
+            (px[2] - px[1]) * (px[2] - px[1]) + (py[2] - py[1]) * (py[2] - py[1]));
+
+        int dstW = (int) Math.round(Math.max(topW, botW));
+        int dstH = (int) Math.round(Math.max(leftH, rightH));
+        if (dstW < 1 || dstH < 1) return null;
+
+        // Clamp destination size
+        dstW = Math.min(dstW, image.getWidth() * 2);
+        dstH = Math.min(dstH, image.getHeight() * 2);
+
+        // Angle of the top edge
+        double angle = -Math.atan2(py[1] - py[0], px[1] - px[0]);
+        double cosA = Math.cos(angle);
+        double sinA = Math.sin(angle);
+
+        // Centroid of polygon
+        double cx = (px[0] + px[1] + px[2] + px[3]) / 4.0;
+        double cy = (py[0] + py[1] + py[2] + py[3]) / 4.0;
+
+        BufferedImage result = new BufferedImage(dstW, dstH, BufferedImage.TYPE_3BYTE_BGR);
+        int imgW = image.getWidth();
+        int imgH = image.getHeight();
+
+        for (int dy = 0; dy < dstH; dy++) {
+            for (int dx = 0; dx < dstW; dx++) {
+                // Affine transform: rotate dst coords back by -angle around centroid
+                double srcX = cx + (dx - dstW / 2.0) * cosA - (dy - dstH / 2.0) * sinA;
+                double srcY = cy + (dx - dstW / 2.0) * sinA + (dy - dstH / 2.0) * cosA;
+
+                if (srcX < 0 || srcX >= imgW - 1 || srcY < 0 || srcY >= imgH - 1) {
+                    result.setRGB(dx, dy, 0xFFFFFF);
+                    continue;
+                }
+
+                int rgb = bilinearInterpolate(image, srcX, srcY);
+                result.setRGB(dx, dy, rgb);
+            }
+        }
+        return result;
+    }
+
+    private static BufferedImage cropBoxAligned(BufferedImage image, DetBox box) {
         int x = Math.max(0, Math.min(box.x, image.getWidth() - 1));
         int y = Math.max(0, Math.min(box.y, image.getHeight() - 1));
         int w = Math.min(box.w, image.getWidth() - x);
@@ -442,6 +723,39 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         return image.getSubimage(x, y, w, h);
     }
 
+    /**
+     * Bilinear interpolation at non-integer image coordinates.
+     * Clamps to edge pixels when near the image boundary.
+     */
+    private static int bilinearInterpolate(BufferedImage img, double x, double y) {
+        int ix = (int) x;
+        int iy = (int) y;
+        double fx = x - ix;
+        double fy = y - iy;
+
+        int c00 = img.getRGB(ix, iy);
+        int c10 = img.getRGB(Math.min(ix + 1, img.getWidth() - 1), iy);
+        int c01 = img.getRGB(ix, Math.min(iy + 1, img.getHeight() - 1));
+        int c11 = img.getRGB(Math.min(ix + 1, img.getWidth() - 1),
+                             Math.min(iy + 1, img.getHeight() - 1));
+
+        int r = (int) Math.round(
+            (1 - fy) * ((1 - fx) * ((c00 >> 16) & 0xFF) + fx * ((c10 >> 16) & 0xFF)) +
+            fy * ((1 - fx) * ((c01 >> 16) & 0xFF) + fx * ((c11 >> 16) & 0xFF)));
+        int g = (int) Math.round(
+            (1 - fy) * ((1 - fx) * ((c00 >> 8) & 0xFF) + fx * ((c10 >> 8) & 0xFF)) +
+            fy * ((1 - fx) * ((c01 >> 8) & 0xFF) + fx * ((c11 >> 8) & 0xFF)));
+        int b = (int) Math.round(
+            (1 - fy) * ((1 - fx) * (c00 & 0xFF) + fx * (c10 & 0xFF)) +
+            fy * ((1 - fx) * (c01 & 0xFF) + fx * (c11 & 0xFF)));
+
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * Resizes a text crop to height 48 (preserving aspect ratio) and normalizes
+     * pixel values to [-1, 1] for CRNN input.
+     */
     private static float[][][][] recPreprocess(BufferedImage crop) {
         int cw = crop.getWidth();
         int ch = crop.getHeight();
@@ -473,6 +787,10 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         return input;
     }
 
+    /**
+     * CTC greedy decoding: argmax at each timestep, collapsing repeats and
+     * removing blanks (index 0). Whitespace is trimmed from the final string.
+     */
     private static String ctcDecode(float[][] logits, List<String> charDict) {
         int T = logits.length;
         int vocab = logits[0].length;
