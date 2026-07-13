@@ -1,6 +1,6 @@
 # TrulyFreeOCR
 
-Business-friendly open source OCR pipeline to produce fully searchable and highly compressed PDFs.
+Business-friendly open source OCR tool to produce fully searchable and highly compressed PDFs.
 All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 **Input**: Any PDF or image (PNG/JPEG/TIFF/BMP/GIF)<br>
@@ -19,7 +19,7 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
   no brew, no apt-get install, no Windows installer wizard.
   The entire stack is self-contained: copy the folder and it runs on any machine.
 
-- **Document processing pipelines** — Headless CLI with JSONC settings file.
+- **Document processing pipeline** — Headless CLI with JSONC settings file.
   All parameters (DPI, language, PSM, MRC on/off) are scriptable. The fat JAR
   has zero Java-classpath fuss — one file to copy, one command to run.
 
