@@ -30,6 +30,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
     private static final String MODEL_DIR = "deps/paddleocr";
     private static final String DET_MODEL = "det.onnx";
     private static final String REC_MODEL = "rec.onnx";
+    private static final String LANG_DICT_DIR = "deps/paddleocr/dict";
 
     // Max side for detection input image; larger images are scaled down to this limit.
     private static final int DET_LIMIT_SIDE = 960;
@@ -68,8 +69,19 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
      * Loads PP-OCRv6 ONNX models and character dictionary.
      * Detection model is required; recognition model and dict are optional
      * (fallback yields axis-aligned boxes without text labels).
+     * Uses the multilingual character dict from bootstrap.
      */
     public PaddleOcrOnnxProvider() throws IOException {
+        this("eng");
+    }
+
+    /**
+     * Loads PP-OCRv6 ONNX models and character dictionary for the given language.
+     * The language parameter is used to select a language-specific character dict
+     * (e.g. deps/paddleocr/dict/{lang}_dict.txt). Falls back to the multilingual
+     * ppocr_keys_v6.txt if no language-specific dict exists.
+     */
+    public PaddleOcrOnnxProvider(String language) throws IOException {
         try {
             env = OrtEnvironment.getEnvironment();
 
@@ -95,15 +107,18 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
                 recOutputName = null;
             }
 
-            charDict = loadCharDict();
+            charDict = loadCharDict(language);
 
         } catch (OrtException e) {
             throw new IOException("Failed to initialize ONNX Runtime", e);
         }
     }
 
-    private static List<String> loadCharDict() throws IOException {
-        Path dictPath = Path.of(MODEL_DIR, "ppocr_keys_v6.txt");
+    private static List<String> loadCharDict(String language) throws IOException {
+        Path dictPath = Path.of(LANG_DICT_DIR, language + "_dict.txt");
+        if (!dictPath.toFile().exists()) {
+            dictPath = Path.of(MODEL_DIR, "ppocr_keys_v6.txt");
+        }
         if (!dictPath.toFile().exists()) {
             dictPath = Path.of(MODEL_DIR, "ppocr_keys_v1.txt");
         }
@@ -149,7 +164,8 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         for (int i = 0; i < sorted.size(); i++) {
             DetBox box = sorted.get(i);
             Rectangle r = polygonBbox(box);
-            blocks.add(new TextBlock(texts.get(i), r, box.confidence));
+            // Scale DBNet confidence (0-1) to 0-100 to match Tesseract convention
+            blocks.add(new TextBlock(texts.get(i), r, box.confidence * 100.0));
         }
 
         return new PageResult(pageIndex + 1, width, height, blocks);

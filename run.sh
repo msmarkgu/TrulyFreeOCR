@@ -33,3 +33,6 @@ if [ -n "$_PLATFORM" ]; then
 else
   exec "$JAVA" -jar "$FAT_JAR" "$@"
 fi
+# Additional flags (passed via "$@"):
+#   --ocr-engine tesseract|paddle   OCR backend (default: tesseract)
+#   --language LANG                  Language code (Tesseract or PaddleOCR)
