@@ -87,7 +87,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--dpi"}, description = "Rendering DPI for PDF page images")
     private Float dpi;
 
-    @Option(names = {"--language"}, description = "Tesseract language model")
+    @Option(names = {"--language", "--lang"}, description = "OCR language model (Tesseract or PaddleOCR language code)")
     private String language;
 
     @Option(names = {"--psm"}, description = "Tesseract page segmentation mode")
@@ -109,7 +109,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
     private File bboxOutput;
 
     @Option(names = {"--ocr-engine"}, defaultValue = "tesseract",
-            description = "OCR engine to use: tesseract (default) or paddle")
+            description = "OCR engine: tesseract (default, requires Tesseract binary) or paddle (requires ONNX models via bootstrap.sh --paddle)")
     private String ocrEngine;
 
     @Override
@@ -144,6 +144,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     : (float) settings.getDouble("rendering.dpi", 300);
             String resolvedLang = language != null ? language
                     : settings.getString("tesseract.language", "eng");
+            String resolvedPaddleLang = language != null ? language
+                    : settings.getString("paddleocr.language", "eng");
             String resolvedPsm = psm != null ? psm
                     : settings.getString("tesseract.psm", "1");
 
@@ -168,11 +170,12 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     );
                     break;
                 case "paddle":
-                    ocrProvider = new PaddleOcrOnnxProvider();
+                    ocrProvider = new PaddleOcrOnnxProvider(resolvedPaddleLang);
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown OCR engine: " + ocrEngine);
             }
+            System.out.println("  Engine: " + ocrEngine);
             JBIG2Compressor compressor = new JBIG2Compressor(resolvedNative);
             PDFAssembler assembler = new PDFAssembler(
                     settings.getString("pdf.font", "HELVETICA"),
@@ -189,7 +192,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
             assembler.setCompressor(compressor);
             assembler.setBackgroundScale(settings.getDouble("pipeline.mrc.backgroundScale", 0.33));
             assembler.setBgSmoothSigma((float) settings.getDouble("pipeline.mrc.bgSmoothSigma", 0.8));
-            assembler.setProducer(settings.getString("pdf.producer", "TrulyFreeOCR"));
+            String producer = switch (ocrEngine) {
+                case "paddle" -> "TrulyFreeOCR (PaddleOCR)";
+                default -> settings.getString("pdf.producer", "TrulyFreeOCR");
+            };
+            assembler.setProducer(producer);
 
             // Resolve worker thread count: CLI arg > settings cap > default (available processors)
             int workerThreads;

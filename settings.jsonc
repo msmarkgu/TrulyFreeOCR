@@ -15,6 +15,22 @@
     // Fallback: "tesseract" (on PATH).
     "tesseract.path": "./deps/tesseract/linux/tesseract",
 
+    // ===== OCR Engine =====
+    // Which OCR engine to use: "tesseract" (default) or "paddle".
+    // Override via --ocr-engine CLI flag.
+    // PaddleOCR uses ONNX Runtime Java for PP-OCRv6, requiring:
+    //   ./bootstrap.sh --paddle   to download ONNX models.
+    // "ocr.engine": "tesseract",
+
+    // ===== PaddleOCR Language =====
+    // Language code for PaddleOCR character dictionary.
+    // PaddleOCR's PP-OCRv6 models are multilingual; the language selects
+    // which character dict (deps/paddleocr/dict/{lang}_dict.txt) to use
+    // for decoding. Falls back to the bundled multilingual dict.
+    //   eng   English (default, multilingual fallback)
+    // Override via --language CLI flag (shared with Tesseract).
+    "paddleocr.language": "eng",
+
     // ===== Tesseract Languages =====
     // Available languages (traineddata in tessdata/). Only those marked
     // with ★ ship by default — download additional .traineddata files from
