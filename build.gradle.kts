@@ -1,6 +1,7 @@
 import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
+import java.time.Duration
 
 plugins {
     application
@@ -27,6 +28,8 @@ dependencies {
 
     implementation("com.google.code.gson:gson:2.10.1")
 
+    implementation("com.microsoft.onnxruntime:onnxruntime:1.26.0")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -47,6 +50,10 @@ tasks.named<Test>("test") {
         }
     }
     outputs.upToDateWhen { false }
+    maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    minHeapSize = "512m"
+    maxHeapSize = "2g"
+    timeout.set(Duration.ofMinutes(10))
     useJUnitPlatform {
         excludeTags("eval")
     }

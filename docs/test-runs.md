@@ -9,6 +9,7 @@ TrulyFreeOCR v1.0.0
   DPI:    300.0
   PSM:    1
   MRC:    off
+  Engine: tesseract
   OCR Workers: 1 thread(s)
   Pages:  10
   Processing 10 pages...
@@ -43,6 +44,7 @@ TrulyFreeOCR v1.0.0
   DPI:    300.0
   PSM:    1
   MRC:    off
+  Engine: tesseract
   OCR Workers: 2 thread(s)
   Pages:  10
   Processing 10 pages...
@@ -77,6 +79,7 @@ TrulyFreeOCR v1.0.0
   DPI:    300.0
   PSM:    1
   MRC:    on
+  Engine: tesseract
   OCR Workers: 1 thread(s)
   Pages:  10
   Processing 10 pages...
@@ -115,6 +118,7 @@ TrulyFreeOCR v1.0.0
   DPI:    300.0
   PSM:    1
   MRC:    on
+  Engine: tesseract
   OCR Workers: 2 thread(s)
   Pages:  10
   Processing 10 pages...
@@ -138,4 +142,11 @@ TrulyFreeOCR v1.0.0
   Output: output.pdf (474 KB)
   Words:  4292 (OCR)
 Done.  prep+ocr 70.5s / asm 39.6s = 110.1s total
+```
+
+5. PaddleOCR engine (WIP — placeholder for actual run output):
+
+```
+# Example: ./deps/jdk/bin/java -jar build/trulyfreeocr.jar --ocr-engine paddle ./tests/eval-corpus/sherlock-holmes-010p.pdf
+# Expected output would include "Engine: paddle" in the console header.
 ```

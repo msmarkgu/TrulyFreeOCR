@@ -6,11 +6,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-
-import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -20,38 +16,27 @@ import com.trulyfreeocr.model.PageResult;
 class OCREngineTest {
 
     static PageExtractor extractor;
-    static OCREngine engine;
+    static TesseractProvider engine;
 
     @BeforeAll
     static void setup() {
         extractor = new PageExtractor();
-        engine = new OCREngine();
+        engine = new TesseractProvider();
     }
 
-    private static PageResult ocrPage(OCREngine engine, List<BufferedImage> pages, int pageIndex) throws IOException {
-        Files.createDirectories(Path.of("temp"));
-        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
-        try {
-            for (int i = 0; i < pages.size(); i++) {
-                BufferedImage page = pages.get(i);
-                if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
-                    BufferedImage gray = new BufferedImage(page.getWidth(), page.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-                    Graphics2D g = gray.createGraphics();
-                    g.drawImage(page, 0, 0, null);
-                    g.dispose();
-                    page = gray;
-                }
-                ImageIO.write(page, "bmp", tempDir.resolve("page-" + i + ".bmp").toFile());
-            }
-            return engine.ocr(pageIndex, tempDir.toFile());
-        } finally {
-            File dir = tempDir.toFile();
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) f.delete();
-            }
-            dir.delete();
-        }
+    private static PageResult ocrPage(TesseractProvider engine, List<BufferedImage> pages, int pageIndex) throws IOException {
+        BufferedImage page = pages.get(pageIndex);
+        BufferedImage gray = page.getType() == BufferedImage.TYPE_BYTE_GRAY ? page
+                : toGray(page);
+        return engine.ocr(gray, pageIndex);
+    }
+
+    private static BufferedImage toGray(BufferedImage img) {
+        BufferedImage gray = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+        return gray;
     }
 
     @Test
