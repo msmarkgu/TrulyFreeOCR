@@ -304,6 +304,30 @@ if [ "$PADDLE" = true ]; then
   else
     echo "Character dictionary already present"
   fi
+
+  # Download PP-OCRv5 English-specific recognition model (7.5 MB, 436-char dict)
+  # Activated via --language en (uses monkt/paddleocr-onnx English model)
+  LANG_DIR="$PADDLEOCR_DIR/languages/en"
+  mkdir -p "$LANG_DIR"
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$LANG_DIR/rec.onnx" ]; then
+    echo "Downloading PP-OCRv5 English-specific rec ONNX model (7.5 MB)..."
+    curl -fsSL "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx" \
+      -o "$LANG_DIR/rec.onnx"
+    echo "  done ($(du -h "$LANG_DIR/rec.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv5 English rec model already present"
+  fi
+
+  DICT_DIR="$PADDLEOCR_DIR/dict"
+  mkdir -p "$DICT_DIR"
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$DICT_DIR/en_dict.txt" ]; then
+    echo "Downloading PP-OCRv5 English character dictionary (436 chars)..."
+    curl -fsSL "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt" \
+      -o "$DICT_DIR/en_dict.txt"
+    echo "  done ($(wc -l < "$DICT_DIR/en_dict.txt") chars)"
+  else
+    echo "PP-OCRv5 English dict already present"
+  fi
 fi
 
 # ── 7. Download jbig2enc (macOS only) ──────────────────────────────────────────

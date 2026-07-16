@@ -35,6 +35,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
     private static final String MODEL_DIR = "deps/paddleocr";
     private static final String DET_MODEL = "det.onnx";
     private static final String REC_MODEL = "rec.onnx";
+    private static final String LANG_MODEL_DIR = "deps/paddleocr/languages";
     private static final String LANG_DICT_DIR = "deps/paddleocr/dict";
 
     /** Available tiers in descending quality order. */
@@ -117,9 +118,13 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
             detInputName = detSession.getInputNames().iterator().next();
             detOutputName = detSession.getOutputNames().iterator().next();
 
-            // Resolve recognition model (optional — graceful fallback)
-            Path recPath = resolveModelPath(tier, REC_MODEL);
-            if (recPath.toFile().exists()) {
+            // Resolve recognition model: prefer language-specific model,
+            // fall back to tier-based multilingual model.
+            Path recPath = resolveLanguageModel(language);
+            if (recPath == null) {
+                recPath = resolveModelPath(tier, REC_MODEL);
+            }
+            if (recPath != null && recPath.toFile().exists()) {
                 recSession = env.createSession(recPath.toString(), opts);
                 recInputName = recSession.getInputNames().iterator().next();
                 recOutputName = recSession.getOutputNames().iterator().next();
@@ -134,6 +139,19 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         } catch (OrtException e) {
             throw new IOException("Failed to initialize ONNX Runtime", e);
         }
+    }
+
+    /**
+     * Resolves a language-specific recognition model path.
+     * Looks for {@code deps/paddleocr/languages/{lang}/rec.onnx}.
+     * Returns null if the language model does not exist.
+     */
+    private static Path resolveLanguageModel(String language) {
+        Path langPath = Path.of(LANG_MODEL_DIR, language, REC_MODEL);
+        if (langPath.toFile().exists()) {
+            return langPath;
+        }
+        return null;
     }
 
     /**
