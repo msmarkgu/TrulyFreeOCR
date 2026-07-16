@@ -30,10 +30,13 @@ esac
 # ── Flag parsing ────────────────────────────────────────────────────────────
 FORCE_DOWNLOAD=false
 PADDLE=false
+PADDLE_TIER="medium"
 for arg in "$@"; do
   case "$arg" in
-    --force)         FORCE_DOWNLOAD=true  ;;
-    --paddle) PADDLE=true   ;;
+    --force)               FORCE_DOWNLOAD=true  ;;
+    --paddle)              PADDLE=true   ;;
+    --paddle-tier=*)       PADDLE_TIER="${arg#*=}" ;;
+    --paddle-tier)         echo "ERROR: --paddle-tier requires a value (tiny|small|medium|all)"; exit 1 ;;
   esac
 done
 if [ "$FORCE_DOWNLOAD" = true ]; then
@@ -226,53 +229,78 @@ WRAPPER
 fi
 
 # ── 6. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──────
+download_paddle_tier() {
+  local tier=$1
+  local tier_dir="$PADDLEOCR_DIR/$tier"
+  local det_url=""
+  local rec_url=""
+  local size_label=""
+
+  case "$tier" in
+    tiny)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx/resolve/main/inference.onnx"
+      size_label="~6 MB"
+      ;;
+    small)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx"
+      size_label="~25 MB"
+      ;;
+    medium)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.onnx"
+      size_label="~132 MB"
+      ;;
+  esac
+
+  mkdir -p "$tier_dir"
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$tier_dir/det.onnx" ]; then
+    echo "Downloading PP-OCRv6_${tier}_det ONNX model ($size_label)..."
+    curl -fsSL -o "$tier_dir/det.onnx" "$det_url"
+    echo "  done ($(du -h "$tier_dir/det.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6_${tier} detection model already present"
+  fi
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$tier_dir/rec.onnx" ]; then
+    echo "Downloading PP-OCRv6_${tier}_rec ONNX model ($size_label)..."
+    curl -fsSL -o "$tier_dir/rec.onnx" "$rec_url"
+    echo "  done ($(du -h "$tier_dir/rec.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6_${tier} recognition model already present"
+  fi
+}
+
 if [ "$PADDLE" = true ]; then
   PADDLEOCR_DIR="$SCRIPT_DIR/deps/paddleocr"
   mkdir -p "$PADDLEOCR_DIR"
 
-  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/det.onnx" ]; then
-    echo "Downloading PP-OCRv6_small_det ONNX model..."
-    curl -fsSL -o "$PADDLEOCR_DIR/det.onnx" \
-      "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx"
-    echo "Detection model downloaded ($(du -h "$PADDLEOCR_DIR/det.onnx" | cut -f1))"
-  else
-    echo "PP-OCRv6 detection model already present"
-  fi
+  case "$PADDLE_TIER" in
+    all)
+      download_paddle_tier tiny
+      download_paddle_tier small
+      download_paddle_tier medium
+      ;;
+    tiny|small|medium)
+      download_paddle_tier "$PADDLE_TIER"
+      # Also symlink into flat dir for backward compat (last downloaded wins)
+      ln -sf "$PADDLE_TIER/det.onnx" "$PADDLEOCR_DIR/det.onnx"
+      ln -sf "$PADDLE_TIER/rec.onnx" "$PADDLEOCR_DIR/rec.onnx"
+      ;;
+    *)
+      echo "ERROR: Unknown paddle tier '$PADDLE_TIER'. Use tiny, small, medium, or all."
+      exit 1
+      ;;
+  esac
 
-  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/rec.onnx" ]; then
-    echo "Downloading PP-OCRv6_small_rec ONNX model..."
-    curl -fsSL -o "$PADDLEOCR_DIR/rec.onnx" \
-      "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx"
-    echo "Recognition model downloaded ($(du -h "$PADDLEOCR_DIR/rec.onnx" | cut -f1))"
-  else
-    echo "PP-OCRv6 recognition model already present"
-  fi
-
-  # Download and extract character dictionary from model's inference.yml
+  # Download character dictionary (shared across all tiers)
   if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/ppocr_keys_v6.txt" ]; then
-    echo "Extracting character dictionary from model inference.yml..."
-    # Write extraction script to temp file to avoid quoting issues
-    PYEXTRACT=$(mktemp)
-    cat > "$PYEXTRACT" << 'PYEOF'
-import sys
-in_dict = False
-for line in sys.stdin:
-    if 'character_dict:' in line:
-        in_dict = True
-        continue
-    if in_dict:
-        s = line.strip()
-        if not s.startswith('- '):
-            break
-        val = s[2:]
-        if val.startswith("'") and val.endswith("'"):
-            inner = val[1:-1].replace("''", "'")
-            print(inner)
-PYEOF
-    curl -fsSL "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.yml" \
-      | python3 "$PYEXTRACT" > "$PADDLEOCR_DIR/ppocr_keys_v6.txt"
-    rm -f "$PYEXTRACT"
-    echo "Character dictionary downloaded ($(wc -l < "$PADDLEOCR_DIR/ppocr_keys_v6.txt") chars)"
+    echo "Downloading PP-OCRv6 character dictionary (18708 chars)..."
+    curl -fsSL "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/dict/ppocrv6_dict.txt" \
+      -o "$PADDLEOCR_DIR/ppocr_keys_v6.txt"
+    echo "  done ($(wc -l < "$PADDLEOCR_DIR/ppocr_keys_v6.txt") chars)"
   else
     echo "Character dictionary already present"
   fi
@@ -294,5 +322,6 @@ echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"
 echo "Build: ./gradlew build"
 echo ""
-echo "Flags: --force         force re-download of all dependencies"
-echo "       --paddle   also download PP-OCRv6 ONNX models (~30 MB) for --ocr-engine paddle"
+echo "Flags: --force                    force re-download of all dependencies"
+echo "       --paddle                   download PP-OCRv6 ONNX models (~132 MB) for --ocr-engine paddle"
+echo "       --paddle-tier={tier}       model size: tiny (~6 MB), small (~25 MB), medium (~132 MB), or all"

@@ -21,9 +21,14 @@ import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
 
 /**
- * OCR provider using PP-OCRv6_small ONNX models (detection + recognition).
+ * OCR provider using PP-OCRv6 ONNX models (detection + recognition).
+ * Supports multiple model tiers: medium (best quality), small, tiny (fastest).
  * Detection: DBNet (Differentiable Binarization) with orientation-aware post-processing.
  * Recognition: CRNN + CTC decode with per-model character dictionary.
+ * <p>
+ * Model files are resolved from {@code deps/paddleocr/{tier}/} with fallback
+ * through smaller tiers, then to the flat {@code deps/paddleocr/} directory
+ * for backward compatibility.
  */
 public class PaddleOcrOnnxProvider implements OcrProvider {
 
@@ -31,6 +36,9 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
     private static final String DET_MODEL = "det.onnx";
     private static final String REC_MODEL = "rec.onnx";
     private static final String LANG_DICT_DIR = "deps/paddleocr/dict";
+
+    /** Available tiers in descending quality order. */
+    private static final String[] TIERS = {"medium", "small", "tiny"};
 
     // Max side for detection input image; larger images are scaled down to this limit.
     private static final int DET_LIMIT_SIDE = 960;
@@ -64,6 +72,7 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
     private final String recOutputName;
 
     private final List<String> charDict;
+    private final String paddleTier;
 
     /**
      * Loads PP-OCRv6 ONNX models and character dictionary.
@@ -72,31 +81,44 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
      * Uses the multilingual character dict from bootstrap.
      */
     public PaddleOcrOnnxProvider() throws IOException {
-        this("eng");
+        this("eng", "medium");
     }
 
     /**
      * Loads PP-OCRv6 ONNX models and character dictionary for the given language.
-     * The language parameter is used to select a language-specific character dict
-     * (e.g. deps/paddleocr/dict/{lang}_dict.txt). Falls back to the multilingual
-     * ppocr_keys_v6.txt if no language-specific dict exists.
+     * Uses the default medium model tier.
      */
     public PaddleOcrOnnxProvider(String language) throws IOException {
+        this(language, "medium");
+    }
+
+    /**
+     * Loads PP-OCRv6 ONNX models for the given language and model tier.
+     * Resolves models from {@code deps/paddleocr/{tier}/} with fallback through
+     * smaller tiers, then to the flat directory for backward compatibility.
+     *
+     * @param language language code for character dict selection
+     * @param tier     model size tier: medium (default), small, or tiny
+     */
+    public PaddleOcrOnnxProvider(String language, String tier) throws IOException {
         try {
             env = OrtEnvironment.getEnvironment();
-
-            Path detPath = Path.of(MODEL_DIR, DET_MODEL);
-            if (!detPath.toFile().exists()) {
-                throw new IOException("Detection model not found: " + detPath.toAbsolutePath()
-                        + ". Run bootstrap.sh to download PP-OCRv6 models.");
-            }
+            this.paddleTier = tier;
 
             OrtSession.SessionOptions opts = new OrtSession.SessionOptions();
+
+            // Resolve detection model with tier fallback
+            Path detPath = resolveModelPath(tier, DET_MODEL);
+            if (!detPath.toFile().exists()) {
+                throw new IOException("Detection model not found: " + detPath.toAbsolutePath()
+                        + ". Run bootstrap.sh --paddle to download PP-OCRv6 models.");
+            }
             detSession = env.createSession(detPath.toString(), opts);
             detInputName = detSession.getInputNames().iterator().next();
             detOutputName = detSession.getOutputNames().iterator().next();
 
-            Path recPath = Path.of(MODEL_DIR, REC_MODEL);
+            // Resolve recognition model (optional — graceful fallback)
+            Path recPath = resolveModelPath(tier, REC_MODEL);
             if (recPath.toFile().exists()) {
                 recSession = env.createSession(recPath.toString(), opts);
                 recInputName = recSession.getInputNames().iterator().next();
@@ -112,6 +134,33 @@ public class PaddleOcrOnnxProvider implements OcrProvider {
         } catch (OrtException e) {
             throw new IOException("Failed to initialize ONNX Runtime", e);
         }
+    }
+
+    /**
+     * Resolves a model file path with fallback chain:
+     * {@code deps/paddleocr/{tier}/file} → next smaller tier → flat dir.
+     */
+    private static Path resolveModelPath(String preferredTier, String modelFile) {
+        // First try the preferred tier subdirectory
+        Path tierPath = Path.of(MODEL_DIR, preferredTier, modelFile);
+        if (tierPath.toFile().exists()) {
+            return tierPath;
+        }
+        // Fall back through smaller tiers
+        boolean foundPreferred = false;
+        for (String t : TIERS) {
+            if (t.equals(preferredTier)) {
+                foundPreferred = true;
+                continue;
+            }
+            if (!foundPreferred) continue; // haven't reached preferred yet
+            Path fallback = Path.of(MODEL_DIR, t, modelFile);
+            if (fallback.toFile().exists()) {
+                return fallback;
+            }
+        }
+        // Finally try the flat directory (backward compat)
+        return Path.of(MODEL_DIR, modelFile);
     }
 
     private static List<String> loadCharDict(String language) throws IOException {

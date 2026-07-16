@@ -112,6 +112,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
             description = "OCR engine: tesseract (default, requires Tesseract binary) or paddle (requires ONNX models via bootstrap.sh --paddle)")
     private String ocrEngine;
 
+    @Option(names = {"--paddle-tier"}, defaultValue = "medium",
+            description = "PaddleOCR model tier: medium (default, best quality), small (faster), or tiny (fastest)")
+    private String paddleTier;
+
     @Override
     public Integer call() {
         Settings settings = Settings.load();
@@ -170,12 +174,14 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     );
                     break;
                 case "paddle":
-                    ocrProvider = new PaddleOcrOnnxProvider(resolvedPaddleLang);
+                    String resolvedPaddleTier = paddleTier != null ? paddleTier
+                            : settings.getString("paddleocr.tier", "medium");
+                    ocrProvider = new PaddleOcrOnnxProvider(resolvedPaddleLang, resolvedPaddleTier);
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown OCR engine: " + ocrEngine);
             }
-            System.out.println("  Engine: " + ocrEngine);
+            System.out.println("  Engine: " + ocrEngine + (ocrEngine.equals("paddle") ? " (" + paddleTier + ")" : ""));
             JBIG2Compressor compressor = new JBIG2Compressor(resolvedNative);
             PDFAssembler assembler = new PDFAssembler(
                     settings.getString("pdf.font", "HELVETICA"),
