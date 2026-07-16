@@ -196,6 +196,28 @@ if not exist "%PADDLEOCR_DIR%\ppocr_keys_v6.txt" (
   echo Character dictionary already present
 )
 
+rem Download PP-OCRv5 English-specific recognition model (7.5 MB, 436-char dict)
+rem Activated via --language en
+set "LANG_DIR=%PADDLEOCR_DIR%\languages\en"
+if not exist "%LANG_DIR%" mkdir "%LANG_DIR%"
+if not exist "%LANG_DIR%\rec.onnx" (
+  echo Downloading PP-OCRv5 English-specific rec ONNX model (7.5 MB)...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx' -OutFile '%LANG_DIR%\rec.onnx'"
+  echo English rec model downloaded
+) else (
+  echo PP-OCRv5 English rec model already present
+)
+
+set "DICT_DIR=%PADDLEOCR_DIR%\dict"
+if not exist "%DICT_DIR%" mkdir "%DICT_DIR%"
+if not exist "%DICT_DIR%\en_dict.txt" (
+  echo Downloading PP-OCRv5 English character dictionary (436 chars)...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt' -OutFile '%DICT_DIR%\en_dict.txt'"
+  echo English character dictionary downloaded
+) else (
+  echo PP-OCRv5 English dict already present
+)
+
 :paddle_done
 
 rem ── 8. Done ───────────────────────────────────────────────────────────
