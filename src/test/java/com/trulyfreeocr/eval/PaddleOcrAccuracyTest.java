@@ -16,22 +16,21 @@ import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.pipeline.PageExtractor;
-import com.trulyfreeocr.pipeline.TesseractProvider;
+import com.trulyfreeocr.pipeline.PaddleOcrOnnxProvider;
 
 /**
- * End-to-end OCR accuracy evaluation on the Sherlock Holmes corpus.
+ * End-to-end OCR accuracy evaluation on the Sherlock Holmes corpus
+ * using the PaddleOCR engine (PP-OCRv6 ONNX Runtime Java).
  *
  * Tagged "eval" — excluded from the default test run.
  * Run explicitly with:
  *   ./gradlew testEval
  */
 @Tag("eval")
-class OcrAccuracyTest {
+class PaddleOcrAccuracyTest {
 
     private static final Path CORPUS_DIR = Path.of("tests/eval-corpus");
-    private static final double WER_THRESHOLD = 0.05; // flag pages above 5%
-
-    private static TesseractProvider ocrEngine = new TesseractProvider();
+    private static final double WER_THRESHOLD = 0.05;
 
     @Test void eval_010p() throws IOException { runEval("sherlock-holmes-010p", 10); }
     @Test void eval_020p() throws IOException { runEval("sherlock-holmes-020p", 20); }
@@ -47,12 +46,19 @@ class OcrAccuracyTest {
             return;
         }
 
-        System.out.println("\n=== " + stem + ".pdf (" + expectedPages + " pages) ===");
+        if (!new File("deps/paddleocr/det.onnx").exists()) {
+            System.out.println("SKIP: PaddleOCR models not found (run bootstrap.sh --paddle first)");
+            return;
+        }
+
+        System.out.println("\n=== PaddleOCR: " + stem + ".pdf (" + expectedPages + " pages) ===");
         GroundTruth gt = GroundTruth.load(jsonPath);
-        evaluateDocument(pdfPath.toFile(), gt);
+
+        PaddleOcrOnnxProvider ocrEngine = new PaddleOcrOnnxProvider();
+        evaluateDocument(pdfPath.toFile(), gt, ocrEngine);
     }
 
-    private void evaluateDocument(File pdf, GroundTruth gt) throws IOException {
+    private void evaluateDocument(File pdf, GroundTruth gt, PaddleOcrOnnxProvider ocrEngine) throws IOException {
         long totalStart = System.currentTimeMillis();
 
         try (PageExtractor pe = new PageExtractor()) {
@@ -60,7 +66,6 @@ class OcrAccuracyTest {
             int n = Math.min(pe.getPageCount(), gt.getPageCount());
             List<PageResult> results = new ArrayList<>(n);
 
-            // Stream pages one at a time to avoid OOM, OCR inline
             for (int i = 0; i < n; i++) {
                 BufferedImage page = pe.renderPage(i);
                 if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
@@ -97,7 +102,6 @@ class OcrAccuracyTest {
 
             long totalTime = System.currentTimeMillis() - totalStart;
 
-            // Aggregate metrics
             List<String> allGt = new ArrayList<>();
             List<String> allOcr = new ArrayList<>();
             int totalGtWords = 0, totalOcrWords = 0;
@@ -150,8 +154,6 @@ class OcrAccuracyTest {
             System.out.printf("    Time per page:        %.2fs%n", totalTime / 1000.0 / n);
         }
     }
-
-    // ── helpers ──────────────────────────────────────────────────────────
 
     private List<String> normalize(List<String> words) {
         return words.stream()

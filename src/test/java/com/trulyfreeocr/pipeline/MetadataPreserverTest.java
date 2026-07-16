@@ -6,12 +6,8 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.imageio.ImageIO;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -27,7 +23,7 @@ class MetadataPreserverTest {
 
     static PageExtractor extractor;
     static ImageSegmenter segmenter;
-    static OCREngine engine;
+    static TesseractProvider engine;
     static PDFAssembler assembler;
     static MetadataPreserver preserver;
 
@@ -35,39 +31,28 @@ class MetadataPreserverTest {
     static void setup() {
         extractor = new PageExtractor();
         segmenter = new ImageSegmenter();
-        engine = new OCREngine();
+        engine = new TesseractProvider();
         assembler = new PDFAssembler();
         preserver = new MetadataPreserver();
     }
 
-    private static List<PageResult> ocrPages(OCREngine engine, List<BufferedImage> pages) throws IOException {
-        Files.createDirectories(Path.of("temp"));
-        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
-        try {
-            for (int i = 0; i < pages.size(); i++) {
-                BufferedImage page = pages.get(i);
-                if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
-                    BufferedImage gray = new BufferedImage(page.getWidth(), page.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-                    Graphics2D g = gray.createGraphics();
-                    g.drawImage(page, 0, 0, null);
-                    g.dispose();
-                    page = gray;
-                }
-                ImageIO.write(page, "bmp", tempDir.resolve("page-" + i + ".bmp").toFile());
-            }
-            List<PageResult> results = new ArrayList<>(pages.size());
-            for (int i = 0; i < pages.size(); i++) {
-                results.add(engine.ocr(i, tempDir.toFile()));
-            }
-            return results;
-        } finally {
-            File dir = tempDir.toFile();
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) f.delete();
-            }
-            dir.delete();
+    private static List<PageResult> ocrPages(TesseractProvider engine, List<BufferedImage> pages) throws IOException {
+        List<PageResult> results = new ArrayList<>(pages.size());
+        for (int i = 0; i < pages.size(); i++) {
+            BufferedImage page = pages.get(i);
+            BufferedImage gray = page.getType() == BufferedImage.TYPE_BYTE_GRAY ? page
+                    : toGray(page);
+            results.add(engine.ocr(gray, i));
         }
+        return results;
+    }
+
+    private static BufferedImage toGray(BufferedImage img) {
+        BufferedImage gray = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+        return gray;
     }
 
     @Test

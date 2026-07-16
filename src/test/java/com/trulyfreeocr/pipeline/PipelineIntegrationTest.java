@@ -11,8 +11,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.imageio.ImageIO;
-
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -21,24 +19,25 @@ import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.SegmentedImage;
+import com.trulyfreeocr.pipeline.PaddleOcrOnnxProvider;
 
 /**
  * End-to-end integration tests running the full pipeline
- * (PageExtractor → ImageSegmenter → OCREngine → PDFAssembler)
+ * (PageExtractor → ImageSegmenter → TesseractProvider → PDFAssembler)
  * on all sample PDFs and verifying the output.
  */
 class PipelineIntegrationTest {
 
     PageExtractor extractor;
     ImageSegmenter segmenter;
-    OCREngine engine;
+    TesseractProvider engine;
     PDFAssembler assembler;
 
     @BeforeEach
     void setup() {
         extractor = new PageExtractor();
         segmenter = new ImageSegmenter();
-        engine = new OCREngine();
+        engine = new TesseractProvider();
         assembler = new PDFAssembler();
     }
 
@@ -166,6 +165,68 @@ class PipelineIntegrationTest {
         assertTrue(size < 100_000_000, "Output PDF should be under 100MB, was " + size + " bytes");
     }
 
+    // ── PaddleOCR Integration Tests ─────────────────────────────────────────
+
+    @Test
+    void paddleOcr_simpleText_outputIsSearchable() throws IOException {
+        // Skip if PaddleOCR models not installed
+        if (!new File("deps/paddleocr/det.onnx").exists()) {
+            return;
+        }
+        PaddleOcrOnnxProvider paddle = new PaddleOcrOnnxProvider();
+
+        File input = new File("tests/simple-text.pdf");
+        var pages = extractor.extractPages(input);
+        var ocrResults = processOcr(paddle, pages);
+
+        try (PDDocument output = assembler.assemble(input,
+                pages.stream().map(p -> toGray(p)).toList(),
+                null, ocrResults, false)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(output);
+            assertTrue(text.toLowerCase().contains("brown"),
+                    "PaddleOCR output should contain 'brown'");
+            assertTrue(text.toLowerCase().contains("fox"),
+                    "PaddleOCR output should contain 'fox'");
+        }
+    }
+
+    @Test
+    void paddleOcr_multiPage_preservesPageCount() throws IOException {
+        if (!new File("deps/paddleocr/det.onnx").exists()) {
+            return;
+        }
+        PaddleOcrOnnxProvider paddle = new PaddleOcrOnnxProvider();
+
+        File input = new File("tests/multi-page.pdf");
+        var pages = extractor.extractPages(input);
+        assertEquals(3, pages.size());
+
+        var ocrResults = processOcr(paddle, pages);
+        assertEquals(3, ocrResults.size());
+    }
+
+    @Test
+    void paddleOcr_twoColumn_outputIsSearchable() throws IOException {
+        if (!new File("deps/paddleocr/det.onnx").exists()) {
+            return;
+        }
+        PaddleOcrOnnxProvider paddle = new PaddleOcrOnnxProvider();
+
+        File input = new File("tests/two-column.pdf");
+        var pages = extractor.extractPages(input);
+        var ocrResults = processOcr(paddle, pages);
+
+        try (PDDocument output = assembler.assemble(input,
+                pages.stream().map(p -> toGray(p)).toList(),
+                null, ocrResults, false)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(output);
+            assertFalse(text.trim().isEmpty(),
+                    "PaddleOCR two-column output should have searchable text");
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     @FunctionalInterface
@@ -191,33 +252,22 @@ class PipelineIntegrationTest {
         }
     }
 
-    private List<PageResult> processOcr(OCREngine engine, List<BufferedImage> pages) throws IOException {
-        Files.createDirectories(Path.of("temp"));
-        Path tempDir = Files.createTempDirectory(Path.of("temp"), "tfocr-test-");
-        try {
-            for (int i = 0; i < pages.size(); i++) {
-                BufferedImage page = pages.get(i);
-                if (page.getType() != BufferedImage.TYPE_BYTE_GRAY) {
-                    BufferedImage gray = new BufferedImage(page.getWidth(), page.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
-                    Graphics2D g = gray.createGraphics();
-                    g.drawImage(page, 0, 0, null);
-                    g.dispose();
-                    page = gray;
-                }
-                ImageIO.write(page, "bmp", tempDir.resolve("page-" + i + ".bmp").toFile());
-            }
-            List<PageResult> results = new ArrayList<>(pages.size());
-            for (int i = 0; i < pages.size(); i++) {
-                results.add(engine.ocr(i, tempDir.toFile()));
-            }
-            return results;
-        } finally {
-            File dir = tempDir.toFile();
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) f.delete();
-            }
-            dir.delete();
+    private List<PageResult> processOcr(OcrProvider engine, List<BufferedImage> pages) throws IOException {
+        List<PageResult> results = new ArrayList<>(pages.size());
+        for (int i = 0; i < pages.size(); i++) {
+            BufferedImage page = pages.get(i);
+            BufferedImage gray = page.getType() == BufferedImage.TYPE_BYTE_GRAY ? page
+                    : toGray(page);
+            results.add(engine.ocr(gray, i));
         }
+        return results;
+    }
+
+    private static BufferedImage toGray(BufferedImage img) {
+        BufferedImage gray = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+        return gray;
     }
 }

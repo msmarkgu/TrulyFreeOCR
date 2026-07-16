@@ -55,10 +55,20 @@ https://github.com/tesseract-ocr/tessdata
 Copyright (c) 2024 Google Inc. and contributors
 Apache License 2.0
 
+### PP-OCRv6 ONNX Models (deps/paddleocr)
+https://github.com/PaddlePaddle/PaddleOCR
+Copyright (c) 2024 Baidu Inc. and contributors
+Apache License 2.0
+
 ### jbig2enc
 https://github.com/agl/jbig2enc
 Copyright (c) 2012 Adam Langley
 Apache License 2.0
+
+### ONNX Runtime
+https://onnxruntime.ai
+Copyright (c) Microsoft Corporation
+MIT License
 
 ---
 

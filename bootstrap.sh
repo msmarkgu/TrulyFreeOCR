@@ -27,13 +27,23 @@ case "$DEB_ARCH" in
          DEB_ARCH="amd64"; LIB_ARCH="x86_64-linux-gnu" ;;
 esac
 
-# ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
-# Add --force flag to force re-download all dependencies
+# ── Flag parsing ────────────────────────────────────────────────────────────
 FORCE_DOWNLOAD=false
-if [ "$#" -gt 0 ] && [ "$1" = "--force" ]; then
-  FORCE_DOWNLOAD=true
+PADDLE=false
+PADDLE_TIER="medium"
+for arg in "$@"; do
+  case "$arg" in
+    --force)               FORCE_DOWNLOAD=true  ;;
+    --paddle)              PADDLE=true   ;;
+    --paddle-tier=*)       PADDLE_TIER="${arg#*=}" ;;
+    --paddle-tier)         echo "ERROR: --paddle-tier requires a value (tiny|small|medium|all)"; exit 1 ;;
+  esac
+done
+if [ "$FORCE_DOWNLOAD" = true ]; then
   echo "Forcing re-download of all dependencies..."
 fi
+
+# ── 1. Download OpenJDK 21 LTS ──────────────────────────────────────────────
 
 JDK_DIR="$SCRIPT_DIR/deps/jdk"
 mkdir -p "$JDK_DIR"
@@ -218,7 +228,109 @@ WRAPPER
   echo "Created jbig2enc wrapper at $JBIG2ENC_DIR/jbig2enc"
 fi
 
-# ── 6. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# ── 6. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──────
+download_paddle_tier() {
+  local tier=$1
+  local tier_dir="$PADDLEOCR_DIR/$tier"
+  local det_url=""
+  local rec_url=""
+  local size_label=""
+
+  case "$tier" in
+    tiny)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx/resolve/main/inference.onnx"
+      size_label="~6 MB"
+      ;;
+    small)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx"
+      size_label="~25 MB"
+      ;;
+    medium)
+      det_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/main/inference.onnx"
+      rec_url="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.onnx"
+      size_label="~132 MB"
+      ;;
+  esac
+
+  mkdir -p "$tier_dir"
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$tier_dir/det.onnx" ]; then
+    echo "Downloading PP-OCRv6_${tier}_det ONNX model ($size_label)..."
+    curl -fsSL -o "$tier_dir/det.onnx" "$det_url"
+    echo "  done ($(du -h "$tier_dir/det.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6_${tier} detection model already present"
+  fi
+
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$tier_dir/rec.onnx" ]; then
+    echo "Downloading PP-OCRv6_${tier}_rec ONNX model ($size_label)..."
+    curl -fsSL -o "$tier_dir/rec.onnx" "$rec_url"
+    echo "  done ($(du -h "$tier_dir/rec.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv6_${tier} recognition model already present"
+  fi
+}
+
+if [ "$PADDLE" = true ]; then
+  PADDLEOCR_DIR="$SCRIPT_DIR/deps/paddleocr"
+  mkdir -p "$PADDLEOCR_DIR"
+
+  case "$PADDLE_TIER" in
+    all)
+      download_paddle_tier tiny
+      download_paddle_tier small
+      download_paddle_tier medium
+      ;;
+    tiny|small|medium)
+      download_paddle_tier "$PADDLE_TIER"
+      # Also symlink into flat dir for backward compat (last downloaded wins)
+      ln -sf "$PADDLE_TIER/det.onnx" "$PADDLEOCR_DIR/det.onnx"
+      ln -sf "$PADDLE_TIER/rec.onnx" "$PADDLEOCR_DIR/rec.onnx"
+      ;;
+    *)
+      echo "ERROR: Unknown paddle tier '$PADDLE_TIER'. Use tiny, small, medium, or all."
+      exit 1
+      ;;
+  esac
+
+  # Download character dictionary (shared across all tiers)
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$PADDLEOCR_DIR/ppocr_keys_v6.txt" ]; then
+    echo "Downloading PP-OCRv6 character dictionary (18708 chars)..."
+    curl -fsSL "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/dict/ppocrv6_dict.txt" \
+      -o "$PADDLEOCR_DIR/ppocr_keys_v6.txt"
+    echo "  done ($(wc -l < "$PADDLEOCR_DIR/ppocr_keys_v6.txt") chars)"
+  else
+    echo "Character dictionary already present"
+  fi
+
+  # Download PP-OCRv5 English-specific recognition model (7.5 MB, 436-char dict)
+  # Activated via --language en (uses monkt/paddleocr-onnx English model)
+  LANG_DIR="$PADDLEOCR_DIR/languages/en"
+  mkdir -p "$LANG_DIR"
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$LANG_DIR/rec.onnx" ]; then
+    echo "Downloading PP-OCRv5 English-specific rec ONNX model (7.5 MB)..."
+    curl -fsSL "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx" \
+      -o "$LANG_DIR/rec.onnx"
+    echo "  done ($(du -h "$LANG_DIR/rec.onnx" | cut -f1))"
+  else
+    echo "PP-OCRv5 English rec model already present"
+  fi
+
+  DICT_DIR="$PADDLEOCR_DIR/dict"
+  mkdir -p "$DICT_DIR"
+  if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$DICT_DIR/en_dict.txt" ]; then
+    echo "Downloading PP-OCRv5 English character dictionary (436 chars)..."
+    curl -fsSL "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt" \
+      -o "$DICT_DIR/en_dict.txt"
+    echo "  done ($(wc -l < "$DICT_DIR/en_dict.txt") chars)"
+  else
+    echo "PP-OCRv5 English dict already present"
+  fi
+fi
+
+# ── 7. Download jbig2enc (macOS only) ──────────────────────────────────────────
 # Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
   mac)
@@ -228,8 +340,12 @@ case "$OS" in
     ;;
 esac
 
-# ── 7. Build project ────────────────────────────────────────────────────────
+# ── 8. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"
 echo "Build: ./gradlew build"
+echo ""
+echo "Flags: --force                    force re-download of all dependencies"
+echo "       --paddle                   download PP-OCRv6 ONNX models (~132 MB) for --ocr-engine paddle"
+echo "       --paddle-tier={tier}       model size: tiny (~6 MB), small (~25 MB), medium (~132 MB), or all"

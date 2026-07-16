@@ -8,13 +8,24 @@ set "JDK_DIR=%SCRIPT_DIR%deps\jdk"
 if not exist "%JDK_DIR%" mkdir "%JDK_DIR%"
 
 set "FORCE_DOWNLOAD=false"
-if /i "%~1"=="--force" set "FORCE_DOWNLOAD=true"
+set "PADDLE=false"
+set "PADDLE_TIER=medium"
+for %%a in (%*) do (
+  if /i "%%a"=="--force" set "FORCE_DOWNLOAD=true"
+  if /i "%%a"=="--paddle" set "PADDLE=true"
+  set "ARG=%%a"
+  if not "!ARG:--paddle-tier==!"=="%%a" (
+    for /f "tokens=2 delims==" %%v in ("%%a") do set "PADDLE_TIER=%%v"
+  )
+)
 
+set "PADDLEOCR_DIR=%SCRIPT_DIR%deps\paddleocr"
 if "%FORCE_DOWNLOAD%"=="true" (
   echo Forcing re-download of all dependencies...
   if exist "%JDK_DIR%" rmdir /S /Q "%JDK_DIR%" 2>nul
   if exist "%TESSDATA_DIR%" rmdir /S /Q "%TESSDATA_DIR%" 2>nul
   if exist "%TESSERACT_DIR%" rmdir /S /Q "%TESSERACT_DIR%" 2>nul
+  if exist "%PADDLEOCR_DIR%" rmdir /S /Q "%PADDLEOCR_DIR%" 2>nul
 )
 
 rem Check if JDK already present
@@ -127,10 +138,96 @@ if not exist "%TESSERACT_DIR%\tesseract.bat" (
   echo Created tesseract wrapper at %TESSERACT_DIR%\tesseract.bat
 )
 
-rem ── 7. Done ───────────────────────────────────────────────────────────
+rem ── 7. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──
+
+rem Helper: download a single tier's models
+if "%PADDLE%"=="true" goto :do_paddle
+goto :paddle_done
+
+:download_tier
+set "TIER=%~1"
+set "TIER_DIR=%PADDLEOCR_DIR%\%TIER%"
+set "DET_URL=https://huggingface.co/PaddlePaddle/PP-OCRv6_%TIER%_det_onnx/resolve/main/inference.onnx"
+set "REC_URL=https://huggingface.co/PaddlePaddle/PP-OCRv6_%TIER%_rec_onnx/resolve/main/inference.onnx"
+
+if not exist "%TIER_DIR%" mkdir "%TIER_DIR%"
+
+if not exist "%TIER_DIR%\det.onnx" (
+  echo Downloading PP-OCRv6_%TIER%_det ONNX model...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri '%DET_URL%' -OutFile '%TIER_DIR%\det.onnx'"
+  echo Detection model downloaded
+) else (
+  echo PP-OCRv6_%TIER% detection model already present
+)
+
+if not exist "%TIER_DIR%\rec.onnx" (
+  echo Downloading PP-OCRv6_%TIER%_rec ONNX model...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri '%REC_URL%' -OutFile '%TIER_DIR%\rec.onnx'"
+  echo Recognition model downloaded
+) else (
+  echo PP-OCRv6_%TIER% recognition model already present
+)
+exit /b
+
+:do_paddle
+if not exist "%PADDLEOCR_DIR%" mkdir "%PADDLEOCR_DIR%"
+
+if "%PADDLE_TIER%"=="all" (
+  call :download_tier tiny
+  call :download_tier small
+  call :download_tier medium
+) else if "%PADDLE_TIER%"=="tiny" (
+  call :download_tier tiny
+) else if "%PADDLE_TIER%"=="small" (
+  call :download_tier small
+) else if "%PADDLE_TIER%"=="medium" (
+  call :download_tier medium
+) else (
+  echo ERROR: Unknown paddle tier '%PADDLE_TIER%'. Use tiny, small, medium, or all.
+  goto :eof
+)
+
+rem Download character dictionary (shared across all tiers)
+if not exist "%PADDLEOCR_DIR%\ppocr_keys_v6.txt" (
+  echo Downloading PP-OCRv6 character dictionary (18708 chars)...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/ppocr/utils/dict/ppocrv6_dict.txt' -OutFile '%PADDLEOCR_DIR%\ppocr_keys_v6.txt'"
+  echo Character dictionary downloaded
+) else (
+  echo Character dictionary already present
+)
+
+rem Download PP-OCRv5 English-specific recognition model (7.5 MB, 436-char dict)
+rem Activated via --language en
+set "LANG_DIR=%PADDLEOCR_DIR%\languages\en"
+if not exist "%LANG_DIR%" mkdir "%LANG_DIR%"
+if not exist "%LANG_DIR%\rec.onnx" (
+  echo Downloading PP-OCRv5 English-specific rec ONNX model (7.5 MB)...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx' -OutFile '%LANG_DIR%\rec.onnx'"
+  echo English rec model downloaded
+) else (
+  echo PP-OCRv5 English rec model already present
+)
+
+set "DICT_DIR=%PADDLEOCR_DIR%\dict"
+if not exist "%DICT_DIR%" mkdir "%DICT_DIR%"
+if not exist "%DICT_DIR%\en_dict.txt" (
+  echo Downloading PP-OCRv5 English character dictionary (436 chars)...
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt' -OutFile '%DICT_DIR%\en_dict.txt'"
+  echo English character dictionary downloaded
+) else (
+  echo PP-OCRv5 English dict already present
+)
+
+:paddle_done
+
+rem ── 8. Done ───────────────────────────────────────────────────────────
 echo.
 echo Bootstrap complete
 echo Run:  run.bat input.pdf -o output.pdf
 echo Build: gradlew build
+echo.
+echo Flags: --force                    force re-download of all dependencies
+echo        --paddle                   download PP-OCRv6 ONNX models for --ocr-engine paddle
+echo        --paddle-tier={tier}       model size: tiny (~6 MB), small (~25 MB), medium (~132 MB), or all
 
 endlocal
