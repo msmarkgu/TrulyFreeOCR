@@ -184,10 +184,12 @@ class PipelineIntegrationTest {
                 null, ocrResults, false)) {
             PDFTextStripper stripper = new PDFTextStripper();
             String text = stripper.getText(output);
-            assertTrue(text.toLowerCase().contains("brown"),
-                    "PaddleOCR output should contain 'brown'");
-            assertTrue(text.toLowerCase().contains("fox"),
-                    "PaddleOCR output should contain 'fox'");
+            assertFalse(text.trim().isEmpty(),
+                    "PaddleOCR output should have searchable text");
+            assertTrue(text.toLowerCase().contains("sphinx"),
+                    "PaddleOCR output should contain 'sphinx'. Got: " + text.replace('\n', '|'));
+            assertTrue(text.toLowerCase().contains("tesseract"),
+                    "PaddleOCR output should contain 'tesseract'. Got: " + text.replace('\n', '|'));
         }
     }
 
