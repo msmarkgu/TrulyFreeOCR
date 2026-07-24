@@ -191,7 +191,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 default:
                     throw new IllegalArgumentException("Unknown OCR engine: " + ocrEngine);
             }
-            System.out.println("  Engine: " + ocrEngine + (ocrEngine.equals("paddle") ? " (" + paddleTier + ")" : ""));
+            String engineLabel = mrcOnly ? "off" : ocrEngine + (ocrEngine.equals("paddle") ? " (" + paddleTier + ")" : "");
+            System.out.println("  Engine: " + engineLabel);
             JBIG2Compressor compressor = new JBIG2Compressor(resolvedNative);
             PDFAssembler assembler = new PDFAssembler(
                     settings.getString("pdf.font", "HELVETICA"),
@@ -552,71 +553,86 @@ public class TrulyFreeOCR implements Callable<Integer> {
             if (pageIdx < 0 || pageIdx >= pageChars.size()) return;
             String ch = text.getUnicode();
             if (ch == null || ch.isEmpty()) return;
-            // Skip whitespace-only strings — they separate words
             if (ch.chars().allMatch(Character::isWhitespace)) return;
-            float totalW = text.getWidth();
-            float perCharW = totalW / Math.max(1, ch.length());
-            float baseX = text.getX();
-            float baseY = text.getY();
             float charH = text.getHeight() > 0 ? text.getHeight() : text.getFontSizeInPt();
-            for (int i = 0; i < ch.length(); i++) {
-                char c = ch.charAt(i);
-                if (Character.isWhitespace(c)) continue;
-                pageChars.get(pageIdx).add(new CharPos(c, baseX + i * perCharW, baseY, perCharW, charH));
-            }
+            // Keep the full TextPosition as one atomic entry — use the bounding
+            // box PDFBox provides rather than splitting into individual characters
+            // with guessed uniform widths, which causes horizontal misalignment.
+            pageChars.get(pageIdx).add(new CharPos(ch, text.getX(), text.getY(), text.getWidth(), charH));
         }
 
         List<PageResult> buildResults(PDDocument doc, float dpi) throws IOException {
             List<PageResult> results = new ArrayList<>(pageChars.size());
             for (int i = 0; i < pageChars.size(); i++) {
                 PDPage pdPage = doc.getPage(i);
-                PDRectangle mb = pdPage.getMediaBox();
-                float pageH = mb.getHeight();
-                float pageW = mb.getWidth();
+                PDRectangle cb = pdPage.getCropBox();
+                float pageH = cb.getHeight();
+                float pageW = cb.getWidth();
                 int imgW = Math.round(pageW * dpi / 72f);
                 int imgH = Math.round(pageH * dpi / 72f);
-                results.add(new PageResult(i, imgW, imgH, buildWordBlocks(pageChars.get(i), pageH, dpi)));
+                results.add(new PageResult(i, imgW, imgH,
+                    buildWordBlocks(pageChars.get(i), dpi)));
             }
             return results;
         }
 
-        private List<TextBlock> buildWordBlocks(List<CharPos> chars, float pageHeightPts, float dpi) {
+        private List<TextBlock> buildWordBlocks(List<CharPos> chars, float dpi) {
             List<TextBlock> blocks = new ArrayList<>();
             if (chars.isEmpty()) return blocks;
 
-            // Sort top-to-bottom then left-to-right
-            chars.sort((a, b) -> {
-                int cmp = Float.compare(a.y, b.y);
-                if (cmp != 0) return cmp;
-                return Float.compare(a.x, b.x);
-            });
+            // Step 1: Cluster characters into visual lines.
+            // Tesseract may assign slightly different y values to characters on the
+            // same visual line, so sort by y first and merge nearby y values.
+            chars.sort((a, b) -> Float.compare(a.y, b.y));
 
-            java.util.List<CharPos> word = new java.util.ArrayList<>();
-            word.add(chars.get(0));
-            for (int i = 1; i < chars.size(); i++) {
-                CharPos prev = word.get(word.size() - 1);
-                CharPos cur = chars.get(i);
-                float dy = cur.y - prev.y;
-                boolean sameLine = Math.abs(dy) < prev.height * 0.5f;
-                float gap = cur.x - (prev.x + prev.width);
-                if (!sameLine || gap > prev.width * 0.5f) {
-                    blocks.add(toBlock(word, pageHeightPts, dpi));
-                    word = new java.util.ArrayList<>();
+            java.util.List<java.util.List<CharPos>> lines = new java.util.ArrayList<>();
+            java.util.List<CharPos> currentLine = new java.util.ArrayList<>();
+            float lineY = chars.get(0).y;
+            float lineThreshold = chars.get(0).height * 0.5f;
+            for (CharPos cp : chars) {
+                if (Math.abs(cp.y - lineY) > lineThreshold) {
+                    if (!currentLine.isEmpty()) {
+                        lines.add(currentLine);
+                    }
+                    currentLine = new java.util.ArrayList<>();
+                    lineY = cp.y;
                 }
-                word.add(cur);
+                currentLine.add(cp);
             }
-            if (!word.isEmpty()) {
-                blocks.add(toBlock(word, pageHeightPts, dpi));
+            if (!currentLine.isEmpty()) {
+                lines.add(currentLine);
+            }
+
+            // Step 2: Within each line, sort by x then split into words by gap.
+            for (java.util.List<CharPos> line : lines) {
+                line.sort((a, b) -> Float.compare(a.x, b.x));
+
+                java.util.List<CharPos> word = new java.util.ArrayList<>();
+                word.add(line.get(0));
+                for (int i = 1; i < line.size(); i++) {
+                    CharPos prev = word.get(word.size() - 1);
+                    CharPos cur = line.get(i);
+                    float gap = cur.x - (prev.x + prev.width);
+                    float gapThreshold = Math.max(prev.height * 0.3f, 2.0f);
+                    if (gap > gapThreshold) {
+                        blocks.add(toBlock(word, dpi));
+                        word = new java.util.ArrayList<>();
+                    }
+                    word.add(cur);
+                }
+                if (!word.isEmpty()) {
+                    blocks.add(toBlock(word, dpi));
+                }
             }
             return blocks;
         }
 
-        private TextBlock toBlock(java.util.List<CharPos> word, float pageHeightPts, float dpi) {
+        private TextBlock toBlock(java.util.List<CharPos> word, float dpi) {
             StringBuilder sb = new StringBuilder();
             float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
             float maxX = Float.MIN_VALUE, maxY = Float.MIN_VALUE;
             for (CharPos cp : word) {
-                sb.append(cp.c);
+                sb.append(cp.text);
                 minX = Math.min(minX, cp.x);
                 minY = Math.min(minY, cp.y);
                 maxX = Math.max(maxX, cp.x + cp.width);
@@ -624,7 +640,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
             }
             float scale = dpi / 72f;
             int px = Math.round(minX * scale);
-            int py = Math.round((pageHeightPts - maxY) * scale);
+            int py = Math.round(minY * scale);
+            // Place character top at correct visual position: adjust for full character height
+            int charHeightPixels = Math.round((maxY - minY) * scale);
+            py = Math.max(0, py - charHeightPixels);
             int pw = Math.round((maxX - minX) * scale);
             int ph = Math.round((maxY - minY) * scale);
             return new TextBlock(sb.toString(),
@@ -632,10 +651,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
         }
 
         private static class CharPos {
-            final char c;
+            final String text;
             final float x, y, width, height;
-            CharPos(char c, float x, float y, float width, float height) {
-                this.c = c; this.x = x; this.y = y; this.width = width; this.height = height;
+            CharPos(String text, float x, float y, float width, float height) {
+                this.text = text; this.x = x; this.y = y; this.width = width; this.height = height;
             }
         }
     }
