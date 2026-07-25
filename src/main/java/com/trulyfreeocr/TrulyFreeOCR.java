@@ -594,7 +594,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
             java.util.List<java.util.List<CharPos>> lines = new java.util.ArrayList<>();
             java.util.List<CharPos> currentLine = new java.util.ArrayList<>();
             float lineY = chars.get(0).y;
-            float lineThreshold = chars.get(0).height * 0.5f;
+            float[] heights = new float[chars.size()];
+            for (int i = 0; i < chars.size(); i++) heights[i] = chars.get(i).height;
+            java.util.Arrays.sort(heights);
+            float medianHeight = heights[heights.length / 2];
+            float lineThreshold = medianHeight * 0.5f;
             for (CharPos cp : chars) {
                 if (Math.abs(cp.y - lineY) > lineThreshold) {
                     if (!currentLine.isEmpty()) {

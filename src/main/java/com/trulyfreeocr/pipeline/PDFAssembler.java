@@ -344,13 +344,23 @@ public class PDFAssembler {
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
-                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float naturalWidth;
+                try {
+                    naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                } catch (IllegalArgumentException e) {
+                    naturalWidth = tb.getWord().length() * fontSize * 0.5f;
+                }
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
                 cs.setTextMatrix(Matrix.concatenate(
                     Matrix.getTranslateInstance(x, y),
                     Matrix.getScaleInstance(sx, 1)));
-                cs.showText(tb.getWord());
+                try {
+                    cs.showText(tb.getWord());
+                } catch (IllegalArgumentException e) {
+                    // Skip invisible text for words with unsupported glyphs;
+                    // visual layer is unaffected.
+                }
             }
             cs.endText();
         }
@@ -469,13 +479,23 @@ public class PDFAssembler {
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
-                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float naturalWidth;
+                try {
+                    naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                } catch (IllegalArgumentException e) {
+                    naturalWidth = tb.getWord().length() * fontSize * 0.5f;
+                }
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
                 cs.setTextMatrix(Matrix.concatenate(
                     Matrix.getTranslateInstance(x, y),
                     Matrix.getScaleInstance(sx, 1)));
-                cs.showText(tb.getWord());
+                try {
+                    cs.showText(tb.getWord());
+                } catch (IllegalArgumentException e) {
+                    // Skip invisible text for words with unsupported glyphs;
+                    // visual layer is unaffected.
+                }
             }
             cs.endText();
         }
