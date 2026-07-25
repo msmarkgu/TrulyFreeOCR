@@ -89,6 +89,7 @@ public class PDFAssembler {
     private double backgroundScale;
     private float bgSmoothSigma;
     private String producer;
+    private int skippedGlyphCount;
 
     public PDFAssembler() {
         this("HELVETICA", 1f);
@@ -144,9 +145,10 @@ public class PDFAssembler {
         }
 
         // Step 2: Pre-encode smoothing (reduces JPEG artifacts, improves compression)
-        // Applied at reduced resolution when downsampling is active.
+        // Scale sigma inversely with backgroundScale so blur is proportional to original resolution.
         if (hasMask && bgSmoothSigma > 0f) {
-            toEncode = gaussianBlur(toEncode, bgSmoothSigma);
+            float effectiveSigma = bgSmoothSigma / (float) backgroundScale;
+            toEncode = gaussianBlur(toEncode, effectiveSigma);
         }
 
         // Step 3: Encode as JPEG with 4:2:0 chroma subsampling + progressive
@@ -340,17 +342,27 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
+                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
-                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float naturalWidth;
+                try {
+                    naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                } catch (IllegalArgumentException e) {
+                    naturalWidth = tb.getWord().length() * fontSize * 0.5f;
+                }
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
                 cs.setTextMatrix(Matrix.concatenate(
                     Matrix.getTranslateInstance(x, y),
                     Matrix.getScaleInstance(sx, 1)));
-                cs.showText(tb.getWord());
+                try {
+                    cs.showText(tb.getWord());
+                } catch (IllegalArgumentException e) {
+                    skippedGlyphCount++;
+                }
             }
             cs.endText();
         }
@@ -381,6 +393,10 @@ public class PDFAssembler {
             info.setProducer(newProducer);
         }
         pdfaFont = null;
+        if (skippedGlyphCount > 0) {
+            System.out.printf("  Warning: %d words skipped — unsupported glyphs for font.%n", skippedGlyphCount);
+            skippedGlyphCount = 0;
+        }
     }
 
     private PDImageXObject createJbig2ImageXObject(PDDocument doc, JBIG2Compressor.CompressionResult result) throws IOException {
@@ -465,17 +481,27 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
+                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
-                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float naturalWidth;
+                try {
+                    naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                } catch (IllegalArgumentException e) {
+                    naturalWidth = tb.getWord().length() * fontSize * 0.5f;
+                }
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
                 cs.setTextMatrix(Matrix.concatenate(
                     Matrix.getTranslateInstance(x, y),
                     Matrix.getScaleInstance(sx, 1)));
-                cs.showText(tb.getWord());
+                try {
+                    cs.showText(tb.getWord());
+                } catch (IllegalArgumentException e) {
+                    skippedGlyphCount++;
+                }
             }
             cs.endText();
         }

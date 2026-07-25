@@ -12,7 +12,7 @@
     // Points to the project-local wrapper in deps/tesseract/,
     // which sets TESSDATA_PREFIX to ./deps/tesseract/tessdata/ before
     // delegating to the project-local tesseract binary.
-    // Fallback: "tesseract" (on PATH).
+    // Linux only — run.sh overrides per platform via --tesseract-path
     "tesseract.path": "./deps/tesseract/linux/tesseract",
 
     // ===== OCR Engine =====
@@ -110,6 +110,12 @@
     //   -p = global symbol dictionary
     //   -s = refine smearing
     "jbig2enc.flags": "-p -s",
+
+    // ===== Intermediate Format =====
+    // Format for temp background/mask images during processing.
+    //   "bmp" = fast, no compression, ~26 MB/page at 300 DPI (default)
+    //   "png" = slower, 4-10x smaller files, better for slow disk / large docs
+    "pipeline.intermediate.format": "bmp",
 
     // ===== PDF/A =====
     // Enable PDF/A-2b output (adds XMP metadata, sRGB OutputIntent).
