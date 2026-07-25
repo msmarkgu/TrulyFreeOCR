@@ -100,6 +100,12 @@ public class TrulyFreeOCR implements Callable<Integer> {
     @Option(names = {"--mrc-only"}, description = "Apply MRC compression without re-running OCR (input must be a searchable PDF)")
     private boolean mrcOnly;
 
+    @Option(names = {"--char-level-match"}, description = "Per-character text positioning — not yet implemented (currently falls back to word-level)")
+    private boolean charLevelMatch;
+
+    @Option(names = {"--word-level-match"}, description = "Word-level text positioning (default, faster)")
+    private boolean wordLevelMatch;
+
     @Option(names = {"--pdfa"}, description = "Enable PDF/A-2b output (XMP metadata, sRGB OutputIntent)")
     private Boolean pdfa;
 
@@ -631,12 +637,14 @@ public class TrulyFreeOCR implements Callable<Integer> {
             StringBuilder sb = new StringBuilder();
             float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
             float maxX = Float.MIN_VALUE, maxY = Float.MIN_VALUE;
+            java.util.List<float[]> charPosList = new java.util.ArrayList<>();
             for (CharPos cp : word) {
                 sb.append(cp.text);
                 minX = Math.min(minX, cp.x);
                 minY = Math.min(minY, cp.y);
                 maxX = Math.max(maxX, cp.x + cp.width);
                 maxY = Math.max(maxY, cp.y + cp.height);
+                charPosList.add(new float[]{cp.x, cp.y, cp.width, cp.height});
             }
             float scale = dpi / 72f;
             int px = Math.round(minX * scale);
@@ -647,7 +655,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
             int pw = Math.round((maxX - minX) * scale);
             int ph = Math.round((maxY - minY) * scale);
             return new TextBlock(sb.toString(),
-                new java.awt.Rectangle(px, py, Math.max(1, pw), Math.max(1, ph)), 100.0);
+                new java.awt.Rectangle(px, py, Math.max(1, pw), Math.max(1, ph)), 100.0,
+                charPosList);
         }
 
         private static class CharPos {
