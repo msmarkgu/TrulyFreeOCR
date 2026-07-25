@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -280,9 +281,6 @@ public class TrulyFreeOCR implements Callable<Integer> {
             int pageCount = source.getNumberOfPages();
             int srcWords = countWords(source);
             System.out.println("  Pages:  " + pageCount);
-            if (srcWords > 0) {
-                System.out.println("  Words:  " + srcWords + " (source text)");
-            }
             processPages(source, pageCount, srcWords, outputFile, txtOutput, bboxOutput, tempDir,
                 segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads, mrcOnly,
@@ -331,8 +329,12 @@ public class TrulyFreeOCR implements Callable<Integer> {
                               ImageSegmenter segmenter,
                               OcrProvider ocrProvider, JBIG2Compressor compressor,
                               PDFAssembler assembler, boolean useMrc, boolean usePdfa,
-                              float dpi, int workerThreads, boolean mrcOnly,
+                              float dpi, int workerThreads,                               boolean mrcOnly,
                               PageProvider pageProvider) throws IOException {
+        if (mrcOnly && srcWords == 0) {
+            throw new IOException("--mrc-only requires a searchable PDF as input "
+                + "(no text found in source). Run without --mrc-only to perform OCR first.");
+        }
         if (srcWords > 0) {
             System.out.println("  Words:  " + srcWords + " (source text)");
         }
@@ -489,8 +491,15 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 // Finalize: copy metadata, add PDF/A if needed
                 System.out.println("  Finalizing document...");
                 assembler.finishAssembly(output, source, outPages, usePdfa);
-                outputFile.delete();
-                output.save(outputFile);
+                File tempOutput = File.createTempFile("tfocr-", ".pdf", outputFile.getParentFile());
+                try {
+                    output.save(tempOutput);
+                    Files.move(tempOutput.toPath(), outputFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception e) {
+                    tempOutput.delete();
+                    throw e;
+                }
 
                 long totalElapsed = (System.nanoTime() - totalStart) / 1_000_000_000L;
                 System.out.printf("  Total: %d pages in %d:%02d%n", pageCount,
