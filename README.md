@@ -43,7 +43,7 @@ A survey of 25+ open-source OCR projects (see [`docs/opensource-ocr-tools.md`](d
 - **Business-friendly license** — Apache 2.0 (no disclosure obligations)
 - **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local; no sudo, no Python, no system deps
 - **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project)
-- **Searchable PDF output** — invisible text layer + optional PDF/A-2b
+- **Searchable PDF output** — invisible text layer + optional [PDF/A-2b](https://www.loc.gov/preservation/digital/formats/fdd/fdd000322.shtml) — most popular standard of [PDF/A](https://en.wikipedia.org/wiki/PDF/A)
 - **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine
 
 Where other tools fall short:
@@ -251,6 +251,12 @@ Common options:
 
 # Export word bounding boxes as JSON
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --bbox-output words.json
+
+# Apply MRC compression to an existing searchable PDF (skip OCR)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar existing-searchable.pdf --mrc-only -o compressed.pdf
+
+# Generate PDF/A-2b output (embeds sRGB OutputIntent and XMP metadata)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --pdfa -o output-pdfa.pdf
 ```
 
 For more options, run:
