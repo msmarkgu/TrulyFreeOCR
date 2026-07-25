@@ -343,8 +343,7 @@ public class PDFAssembler {
                 float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
-                // Stretch text horizontally to fill the bbox width so that
-                // search highlights cover the full word.
+                // Word-level scaling: uniform horizontal stretch to fill bbox
                 float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
@@ -469,8 +468,7 @@ public class PDFAssembler {
                 float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
-                // Stretch text horizontally to fill the bbox width so that
-                // search highlights cover the full word.
+                // Word-level scaling: uniform horizontal stretch to fill bbox
                 float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
                 float targetWidth = tb.getBbox().width * scaleX;
                 float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
