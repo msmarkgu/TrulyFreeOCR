@@ -139,6 +139,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
         System.out.println("TrulyFreeOCR v1.0.0");
         System.out.println("  Input:  " + inputFile + " (" + formatSize(inputFile.length()) + ")");
 
+        if (charLevelMatch) {
+            System.out.println("  Note: --char-level-match is not yet implemented; using word-level positioning.");
+        }
+
         try {
             // Resolve each parameter: CLI arg > settings.jsonc > hardcoded default
             File resolvedOutput = outputFile != null ? outputFile
@@ -185,7 +189,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 case "tesseract":
                     ocrProvider = new TesseractProvider(
                             resolvedTessdata,
-                            tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"),
+                            tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"), // Linux default; run.sh overrides per platform
                             resolvedLang,
                             resolvedPsm
                     );
@@ -550,7 +554,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
         /**
          * Extract text from a single page of a searchable PDF.
-         * Each worker creates its own instance — thread-safe.
+         * Each worker creates its own TextPositionCollector instance.
+         * PDDocument is read-only here; concurrent reads of different pages
+         * are safe per PDFBox internals (no shared mutable state in
+         * PDFTextStripper.writeText for distinct pages).
          */
         static PageResult extractPage(PDDocument doc, int pageIdx, float dpi) throws IOException {
             TextPositionCollector c = new TextPositionCollector(pageIdx, true);

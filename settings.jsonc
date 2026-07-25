@@ -12,7 +12,7 @@
     // Points to the project-local wrapper in deps/tesseract/,
     // which sets TESSDATA_PREFIX to ./deps/tesseract/tessdata/ before
     // delegating to the project-local tesseract binary.
-    // Fallback: "tesseract" (on PATH).
+    // Linux only — run.sh overrides per platform via --tesseract-path
     "tesseract.path": "./deps/tesseract/linux/tesseract",
 
     // ===== OCR Engine =====

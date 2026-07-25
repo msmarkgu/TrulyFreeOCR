@@ -124,6 +124,7 @@ public class TesseractProvider implements OcrProvider {
 
     private List<TextBlock> parseTsv(File tsv) throws IOException {
         List<TextBlock> blocks = new ArrayList<>();
+        int skippedRows = 0;
         try (BufferedReader reader = new BufferedReader(
                 new java.io.InputStreamReader(new java.io.FileInputStream(tsv), StandardCharsets.UTF_8))) {
             String header = reader.readLine();
@@ -148,8 +149,12 @@ public class TesseractProvider implements OcrProvider {
 
                     blocks.add(new TextBlock(text, new Rectangle(left, top, w, h), conf));
                 } catch (NumberFormatException e) {
+                    skippedRows++;
                 }
             }
+        }
+        if (skippedRows > 0) {
+            System.out.printf("  Warning: skipped %d malformed TSV rows%n", skippedRows);
         }
         return blocks;
     }
