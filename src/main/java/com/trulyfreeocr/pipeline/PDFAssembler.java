@@ -89,6 +89,7 @@ public class PDFAssembler {
     private double backgroundScale;
     private float bgSmoothSigma;
     private String producer;
+    private int skippedGlyphCount;
 
     public PDFAssembler() {
         this("HELVETICA", 1f);
@@ -358,8 +359,7 @@ public class PDFAssembler {
                 try {
                     cs.showText(tb.getWord());
                 } catch (IllegalArgumentException e) {
-                    // Skip invisible text for words with unsupported glyphs;
-                    // visual layer is unaffected.
+                    skippedGlyphCount++;
                 }
             }
             cs.endText();
@@ -391,6 +391,10 @@ public class PDFAssembler {
             info.setProducer(newProducer);
         }
         pdfaFont = null;
+        if (skippedGlyphCount > 0) {
+            System.out.printf("  Warning: %d words skipped — unsupported glyphs for font.%n", skippedGlyphCount);
+            skippedGlyphCount = 0;
+        }
     }
 
     private PDImageXObject createJbig2ImageXObject(PDDocument doc, JBIG2Compressor.CompressionResult result) throws IOException {
@@ -493,8 +497,7 @@ public class PDFAssembler {
                 try {
                     cs.showText(tb.getWord());
                 } catch (IllegalArgumentException e) {
-                    // Skip invisible text for words with unsupported glyphs;
-                    // visual layer is unaffected.
+                    skippedGlyphCount++;
                 }
             }
             cs.endText();
