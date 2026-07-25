@@ -108,7 +108,7 @@ else
   echo "Gradle already present in $GRADLE_DIR"
 fi
 
-# ── 4. Download Tesseract language data ─────────────────────────────────────
+# ── 3. Download Tesseract language data ─────────────────────────────────────
 TESSDATA_DIR="$SCRIPT_DIR/deps/tesseract/tessdata"
 mkdir -p "$TESSDATA_DIR"
 
@@ -131,7 +131,7 @@ if [ ! -f "$TESSDATA_DIR/configs/tsv" ]; then
   echo "Created tessdata/configs/tsv"
 fi
 
-# ── 5. Download Tesseract + jbig2enc project-local binaries ────────────
+# ── 4. Download Tesseract + jbig2enc project-local binaries ────────────
 TESSERACT_DIR="$SCRIPT_DIR/deps/tesseract/$OS"
 JBIG2ENC_DIR="$SCRIPT_DIR/deps/jbig2enc/$OS"
 mkdir -p "$TESSERACT_DIR/lib" "$JBIG2ENC_DIR/lib"
@@ -228,7 +228,7 @@ WRAPPER
   echo "Created jbig2enc wrapper at $JBIG2ENC_DIR/jbig2enc"
 fi
 
-# ── 6. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──────
+# ── 5. Download PP-OCRv6 ONNX models for PaddleOCR engine (optional) ──────
 download_paddle_tier() {
   local tier=$1
   local tier_dir="$PADDLEOCR_DIR/$tier"
@@ -330,7 +330,7 @@ if [ "$PADDLE" = true ]; then
   fi
 fi
 
-# ── 7. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# ── 6. Download jbig2enc (macOS only) ──────────────────────────────────────────
 # Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
   mac)
@@ -340,7 +340,7 @@ case "$OS" in
     ;;
 esac
 
-# ── 8. Build project ────────────────────────────────────────────────────────
+# ── 7. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"

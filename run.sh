@@ -25,13 +25,13 @@ esac
 echo "Using JDK: $JAVA"
 
 if [ -n "$_PLATFORM" ]; then
-  exec "$JAVA" -jar "$FAT_JAR" \
+  exec "$JAVA" -Xmx${TFOCR_HEAP:-2g} -jar "$FAT_JAR" \
     --native-dir "$SCRIPT_DIR/deps/jbig2enc" \
     --tesseract-path "$SCRIPT_DIR/deps/tesseract/$_PLATFORM/tesseract" \
     --tessdata-dir "$SCRIPT_DIR/deps/tesseract/tessdata" \
     "$@"
 else
-  exec "$JAVA" -jar "$FAT_JAR" "$@"
+  exec "$JAVA" -Xmx${TFOCR_HEAP:-2g} -jar "$FAT_JAR" "$@"
 fi
 # Additional flags (passed via "$@"):
 #   --ocr-engine tesseract|paddle   OCR backend (default: tesseract)
