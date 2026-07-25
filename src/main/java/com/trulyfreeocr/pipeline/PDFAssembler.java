@@ -282,11 +282,16 @@ public class PDFAssembler {
                           BufferedImage background, BufferedImage foregroundMask,
                           PageResult ocr) throws IOException {
         PDPage sourcePage = source.getPage(pageIndex);
-        PDRectangle mediaBox = sourcePage.getMediaBox();
-        float pageW = mediaBox.getWidth();
-        float pageH = mediaBox.getHeight();
+        // Use crop box dimensions so the output page matches the visible area
+        // that PDFRenderer.renderImageWithDPI() renders.  When the source crop
+        // box differs from the media box this keeps text coordinates aligned.
+        PDRectangle cropBox = sourcePage.getCropBox();
+        float pageW = cropBox.getWidth();
+        float pageH = cropBox.getHeight();
 
-        PDPage outPage = new PDPage(mediaBox);
+        // Create page with [0,0,pageW,pageH] so user space origin aligns
+        // with the crop-box-relative coordinates from text extraction.
+        PDPage outPage = new PDPage(new PDRectangle(pageW, pageH));
         output.addPage(outPage);
 
         try (PDPageContentStream cs = new PDPageContentStream(output, outPage)) {
@@ -338,7 +343,13 @@ public class PDFAssembler {
                 float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
-                cs.setTextMatrix(Matrix.getTranslateInstance(x, y));
+                // Word-level scaling: uniform horizontal stretch to fill bbox
+                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float targetWidth = tb.getBbox().width * scaleX;
+                float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
+                cs.setTextMatrix(Matrix.concatenate(
+                    Matrix.getTranslateInstance(x, y),
+                    Matrix.getScaleInstance(sx, 1)));
                 cs.showText(tb.getWord());
             }
             cs.endText();
@@ -411,11 +422,11 @@ public class PDFAssembler {
                                int fgWidth, int fgHeight,
                                PageResult ocr) throws IOException {
         PDPage sourcePage = source.getPage(pageIndex);
-        PDRectangle mediaBox = sourcePage.getMediaBox();
-        float pageW = mediaBox.getWidth();
-        float pageH = mediaBox.getHeight();
+        PDRectangle cropBox = sourcePage.getCropBox();
+        float pageW = cropBox.getWidth();
+        float pageH = cropBox.getHeight();
 
-        PDPage outPage = new PDPage(mediaBox);
+        PDPage outPage = new PDPage(new PDRectangle(pageW, pageH));
         output.addPage(outPage);
 
         try (PDPageContentStream cs = new PDPageContentStream(output, outPage)) {
@@ -457,7 +468,13 @@ public class PDFAssembler {
                 float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
-                cs.setTextMatrix(Matrix.getTranslateInstance(x, y));
+                // Word-level scaling: uniform horizontal stretch to fill bbox
+                float naturalWidth = pageFont.getStringWidth(tb.getWord()) / 1000f * fontSize;
+                float targetWidth = tb.getBbox().width * scaleX;
+                float sx = naturalWidth > 0 ? targetWidth / naturalWidth : 1.0f;
+                cs.setTextMatrix(Matrix.concatenate(
+                    Matrix.getTranslateInstance(x, y),
+                    Matrix.getScaleInstance(sx, 1)));
                 cs.showText(tb.getWord());
             }
             cs.endText();

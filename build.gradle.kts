@@ -22,6 +22,7 @@ repositories {
 
 dependencies {
     implementation("org.apache.pdfbox:pdfbox:3.0.6")
+    implementation("org.apache.pdfbox:jbig2-imageio:3.0.5")
     implementation("com.github.jai-imageio:jai-imageio-jpeg2000:1.4.0")
     implementation("info.picocli:picocli:4.7.6")
     annotationProcessor("info.picocli:picocli-codegen:4.7.6")
