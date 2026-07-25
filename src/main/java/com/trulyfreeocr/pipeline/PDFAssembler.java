@@ -145,9 +145,10 @@ public class PDFAssembler {
         }
 
         // Step 2: Pre-encode smoothing (reduces JPEG artifacts, improves compression)
-        // Applied at reduced resolution when downsampling is active.
+        // Scale sigma inversely with backgroundScale so blur is proportional to original resolution.
         if (hasMask && bgSmoothSigma > 0f) {
-            toEncode = gaussianBlur(toEncode, bgSmoothSigma);
+            float effectiveSigma = bgSmoothSigma / (float) backgroundScale;
+            toEncode = gaussianBlur(toEncode, effectiveSigma);
         }
 
         // Step 3: Encode as JPEG with 4:2:0 chroma subsampling + progressive
@@ -341,7 +342,8 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
+                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
@@ -479,7 +481,8 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height) * scaleY;
+                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
