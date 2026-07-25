@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -138,6 +139,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
         System.out.println("TrulyFreeOCR v1.0.0");
         System.out.println("  Input:  " + inputFile + " (" + formatSize(inputFile.length()) + ")");
 
+        if (charLevelMatch) {
+            System.out.println("  Note: --char-level-match is not yet implemented; using word-level positioning.");
+        }
+
         try {
             // Resolve each parameter: CLI arg > settings.jsonc > hardcoded default
             File resolvedOutput = outputFile != null ? outputFile
@@ -184,7 +189,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 case "tesseract":
                     ocrProvider = new TesseractProvider(
                             resolvedTessdata,
-                            tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"),
+                            tesseractPath != null ? tesseractPath : settings.getString("tesseract.path", "./deps/tesseract/linux/tesseract"), // Linux default; run.sh overrides per platform
                             resolvedLang,
                             resolvedPsm
                     );
@@ -231,10 +236,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 workerThreads = Math.min(avail, maxThreads);
             }
             System.out.println("  OCR Workers: " + workerThreads + " thread(s)");
+            String intermediateFormat = settings.getString("pipeline.intermediate.format", "bmp");
 
             // Run the pipeline
             runPipeline(inputFile, resolvedOutput, resolvedTxtOutput, resolvedJsonOutput, segmenter, ocrProvider, compressor, assembler,
-                useMrc, usePdfa, resolvedDpi, workerThreads, mrcOnly);
+                useMrc, usePdfa, resolvedDpi, workerThreads, mrcOnly, intermediateFormat);
             return 0;
 
         } catch (Exception e) {
@@ -248,7 +254,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                              ImageSegmenter segmenter,
                              OcrProvider ocrProvider, JBIG2Compressor compressor,
                              PDFAssembler assembler, boolean useMrc, boolean usePdfa,
-                             float dpi, int workerThreads, boolean mrcOnly) throws IOException {
+                             float dpi, int workerThreads, boolean mrcOnly,
+                             String intermediateFormat) throws IOException {
 
         String inputName = inputFile.getName().replaceAll("\\.[^.]+$", "");
         File tempDir = new File("temp/" + inputName + "-" + System.nanoTime());
@@ -258,11 +265,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
             if (isImageFile(inputFile)) {
                 runImagePipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
                     segmenter, ocrProvider, compressor, assembler,
-                    useMrc, usePdfa, dpi, workerThreads, mrcOnly);
+                    useMrc, usePdfa, dpi, workerThreads, mrcOnly, intermediateFormat);
             } else {
                 runPdfPipeline(inputFile, outputFile, txtOutput, bboxOutput, tempDir, inputName,
                     segmenter, ocrProvider, compressor, assembler,
-                    useMrc, usePdfa, dpi, workerThreads, mrcOnly);
+                    useMrc, usePdfa, dpi, workerThreads, mrcOnly, intermediateFormat);
             }
         } finally {
             deleteDir(tempDir);
@@ -274,18 +281,17 @@ public class TrulyFreeOCR implements Callable<Integer> {
                                 ImageSegmenter segmenter,
                                 OcrProvider ocrProvider, JBIG2Compressor compressor,
                                 PDFAssembler assembler, boolean useMrc, boolean usePdfa,
-                                float dpi, int workerThreads, boolean mrcOnly) throws IOException {
+                                float dpi, int workerThreads, boolean mrcOnly,
+                                String intermediateFormat) throws IOException {
         try (PDDocument source = Loader.loadPDF(inputFile)) {
             PDFRenderer renderer = new PDFRenderer(source);
             int pageCount = source.getNumberOfPages();
             int srcWords = countWords(source);
             System.out.println("  Pages:  " + pageCount);
-            if (srcWords > 0) {
-                System.out.println("  Words:  " + srcWords + " (source text)");
-            }
             processPages(source, pageCount, srcWords, outputFile, txtOutput, bboxOutput, tempDir,
                 segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads, mrcOnly,
+                intermediateFormat,
                 (i) -> renderer.renderImageWithDPI(i, dpi));
         }
     }
@@ -295,7 +301,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
                                   ImageSegmenter segmenter,
                                   OcrProvider ocrProvider, JBIG2Compressor compressor,
                                   PDFAssembler assembler, boolean useMrc, boolean usePdfa,
-                                  float dpi, int workerThreads, boolean mrcOnly) throws IOException {
+                                  float dpi, int workerThreads, boolean mrcOnly,
+                                  String intermediateFormat) throws IOException {
         List<BufferedImage> pages = loadImagePages(inputFile);
         int pageCount = pages.size();
         float imageDpi = getImageDPI(inputFile, dpi);
@@ -322,6 +329,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
             processPages(source, pageCount, 0, outputFile, txtOutput, bboxOutput, tempDir,
                 segmenter, ocrProvider, compressor, assembler,
                 useMrc, usePdfa, dpi, workerThreads, mrcOnly,
+                intermediateFormat,
                 pages::get);
         }
     }
@@ -332,20 +340,14 @@ public class TrulyFreeOCR implements Callable<Integer> {
                               OcrProvider ocrProvider, JBIG2Compressor compressor,
                               PDFAssembler assembler, boolean useMrc, boolean usePdfa,
                               float dpi, int workerThreads, boolean mrcOnly,
+                              String intermediateFormat,
                               PageProvider pageProvider) throws IOException {
+        if (mrcOnly && srcWords == 0) {
+            throw new IOException("--mrc-only requires a searchable PDF as input "
+                + "(no text found in source). Run without --mrc-only to perform OCR first.");
+        }
         if (srcWords > 0) {
             System.out.println("  Words:  " + srcWords + " (source text)");
-        }
-
-        // Pre-extract existing text when in mrc-only mode
-        List<PageResult> existingText = null;
-        if (mrcOnly) {
-            if (srcWords > 0) {
-                System.out.println("  Extracting existing text from source PDF...");
-                existingText = extractExistingText(source, pageCount, dpi);
-            } else {
-                System.out.println("  Warning: Source has no existing text; OCR will still run.");
-            }
         }
 
         long totalStart = System.nanoTime();
@@ -383,7 +385,6 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 BufferedImage page = pageProvider.getPage(i);
 
                 final int pageIdx = i;
-                final List<PageResult> existingTextRef = existingText;
                 ocrFutures.add(ocrExecutor.submit(() -> {
                     long localStart = System.nanoTime();
                     try {
@@ -398,18 +399,18 @@ public class TrulyFreeOCR implements Callable<Integer> {
                         if (useMrc) {
                             SegmentedImage seg = segmenter.segment(page);
                             background = seg.getCleanedBackground();
-                            ImageIO.write(seg.getForegroundMask(), "bmp",
-                                new File(tempDir, "mask-" + pageIdx + ".bmp"));
+                            ImageIO.write(seg.getForegroundMask(), intermediateFormat,
+                                new File(tempDir, "mask-" + pageIdx + "." + intermediateFormat));
                         } else {
                             background = gray;
                         }
-                        ImageIO.write(background, "bmp",
-                            new File(tempDir, "bg-" + pageIdx + ".bmp"));
+                        ImageIO.write(background, intermediateFormat,
+                            new File(tempDir, "bg-" + pageIdx + "." + intermediateFormat));
 
-                        // OCR or use pre-extracted existing text
+                        // OCR or extract existing text per-page
                         PageResult r;
-                        if (existingTextRef != null) {
-                            r = existingTextRef.get(pageIdx);
+                        if (mrcOnly) {
+                            r = TextPositionCollector.extractPage(source, pageIdx, dpi);
                         } else {
                             r = ocrProvider.ocr(gray, pageIdx);
                         }
@@ -476,7 +477,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 List<PDPage> outPages = new ArrayList<>(pageCount);
 
                 for (int i = 0; i < pageCount; i++) {
-                    BufferedImage bg = ImageIO.read(new File(tempDir, "bg-" + i + ".bmp"));
+                    BufferedImage bg = ImageIO.read(new File(tempDir, "bg-" + i + "." + intermediateFormat));
 
                     PDPage outPage;
                     if (jbig2Batch != null && jbig2Batch.getGlobalSym().length > 0) {
@@ -487,7 +488,7 @@ public class TrulyFreeOCR implements Callable<Integer> {
                             ocrResults.get(i));
                     } else if (useMrc) {
                         // CCITT G4 foreground (no shared JBIG2 available)
-                        BufferedImage mask = ImageIO.read(new File(tempDir, "mask-" + i + ".bmp"));
+                        BufferedImage mask = ImageIO.read(new File(tempDir, "mask-" + i + "." + intermediateFormat));
                         outPage = assembler.addPage(output, source, i, bg, mask, ocrResults.get(i));
                         mask = null;
                     } else {
@@ -501,8 +502,15 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 // Finalize: copy metadata, add PDF/A if needed
                 System.out.println("  Finalizing document...");
                 assembler.finishAssembly(output, source, outPages, usePdfa);
-                outputFile.delete();
-                output.save(outputFile);
+                File tempOutput = File.createTempFile("tfocr-", ".pdf", outputFile.getParentFile());
+                try {
+                    output.save(tempOutput);
+                    Files.move(tempOutput.toPath(), outputFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception e) {
+                    tempOutput.delete();
+                    throw e;
+                }
 
                 long totalElapsed = (System.nanoTime() - totalStart) / 1_000_000_000L;
                 System.out.printf("  Total: %d pages in %d:%02d%n", pageCount,
@@ -526,37 +534,63 @@ public class TrulyFreeOCR implements Callable<Integer> {
     }
 
     /**
-     * Extracts existing text from a searchable PDF using PDFBox's PDFTextStripper
-     * with position-aware character grouping.  Used by --mrc-only to skip OCR.
-     */
-    private static List<PageResult> extractExistingText(PDDocument doc, int pageCount, float dpi) throws IOException {
-        TextPositionCollector collector = new TextPositionCollector(pageCount);
-        collector.setStartPage(1);
-        collector.setEndPage(pageCount);
-        collector.setSortByPosition(true);
-        collector.writeText(doc, new java.io.StringWriter());
-        return collector.buildResults(doc, dpi);
-    }
-
-    /**
      * Custom PDFTextStripper that captures per-character positions
      * grouped by page, then assembles word-level TextBlock entries.
      */
     private static class TextPositionCollector extends PDFTextStripper {
         private final java.util.List<java.util.List<CharPos>> pageChars;
+        private final int pageOffset;
 
+        /** Multi-page constructor: extracts text from all pages. */
         TextPositionCollector(int pageCount) throws IOException {
             super();
+            this.pageOffset = -1;
             pageChars = new java.util.ArrayList<>(pageCount);
             for (int i = 0; i < pageCount; i++) {
                 pageChars.add(new java.util.ArrayList<>());
             }
         }
 
+        /** Single-page constructor: extracts text from one page only. */
+        private TextPositionCollector(int pageOffset, boolean singlePage) throws IOException {
+            super();
+            this.pageOffset = pageOffset;
+            pageChars = new java.util.ArrayList<>(1);
+            pageChars.add(new java.util.ArrayList<>());
+        }
+
+        /**
+         * Extract text from a single page of a searchable PDF.
+         * Each worker creates its own TextPositionCollector instance.
+         * PDDocument is read-only here; concurrent reads of different pages
+         * are safe per PDFBox internals (no shared mutable state in
+         * PDFTextStripper.writeText for distinct pages).
+         */
+        static PageResult extractPage(PDDocument doc, int pageIdx, float dpi) throws IOException {
+            TextPositionCollector c = new TextPositionCollector(pageIdx, true);
+            c.setStartPage(pageIdx + 1);
+            c.setEndPage(pageIdx + 1);
+            c.setSortByPosition(true);
+            c.writeText(doc, new java.io.StringWriter());
+            PDPage pdPage = doc.getPage(pageIdx);
+            PDRectangle cb = pdPage.getCropBox();
+            int imgW = Math.round(cb.getWidth() * dpi / 72f);
+            int imgH = Math.round(cb.getHeight() * dpi / 72f);
+            return new PageResult(pageIdx, imgW, imgH,
+                c.buildWordBlocks(c.pageChars.get(0), dpi));
+        }
+
         @Override
         protected void processTextPosition(TextPosition text) {
             int pageIdx = getCurrentPageNo() - 1;
-            if (pageIdx < 0 || pageIdx >= pageChars.size()) return;
+            if (pageOffset >= 0) {
+                // Single-page mode: skip chars from other pages
+                if (pageIdx != pageOffset) return;
+                pageIdx = 0;
+            } else {
+                // Multi-page mode: bounds check
+                if (pageIdx < 0 || pageIdx >= pageChars.size()) return;
+            }
             String ch = text.getUnicode();
             if (ch == null || ch.isEmpty()) return;
             if (ch.chars().allMatch(Character::isWhitespace)) return;
@@ -594,7 +628,11 @@ public class TrulyFreeOCR implements Callable<Integer> {
             java.util.List<java.util.List<CharPos>> lines = new java.util.ArrayList<>();
             java.util.List<CharPos> currentLine = new java.util.ArrayList<>();
             float lineY = chars.get(0).y;
-            float lineThreshold = chars.get(0).height * 0.5f;
+            float[] heights = new float[chars.size()];
+            for (int i = 0; i < chars.size(); i++) heights[i] = chars.get(i).height;
+            java.util.Arrays.sort(heights);
+            float medianHeight = heights[heights.length / 2];
+            float lineThreshold = medianHeight * 0.5f;
             for (CharPos cp : chars) {
                 if (Math.abs(cp.y - lineY) > lineThreshold) {
                     if (!currentLine.isEmpty()) {
@@ -648,10 +686,8 @@ public class TrulyFreeOCR implements Callable<Integer> {
             }
             float scale = dpi / 72f;
             int px = Math.round(minX * scale);
+            // bbox.y = top of character in image pixels (top-left origin, y increases downward)
             int py = Math.round(minY * scale);
-            // Place character top at correct visual position: adjust for full character height
-            int charHeightPixels = Math.round((maxY - minY) * scale);
-            py = Math.max(0, py - charHeightPixels);
             int pw = Math.round((maxX - minX) * scale);
             int ph = Math.round((maxY - minY) * scale);
             return new TextBlock(sb.toString(),
@@ -882,9 +918,15 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
     private static int countWords(PDDocument doc) throws IOException {
         PDFTextStripper stripper = new PDFTextStripper();
+        int totalPages = doc.getNumberOfPages();
+        int samplePages = Math.min(10, totalPages);
+        stripper.setStartPage(1);
+        stripper.setEndPage(samplePages);
         String text = stripper.getText(doc).trim();
         if (text.isEmpty()) return 0;
-        return text.split("\\s+").length;
+        int sampleCount = text.split("\\s+").length;
+        if (samplePages >= totalPages) return sampleCount;
+        return (int) ((double) sampleCount / samplePages * totalPages);
     }
 
     private static int countOcrWords(List<PageResult> results) {

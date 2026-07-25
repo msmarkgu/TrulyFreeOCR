@@ -32,7 +32,7 @@ public class Settings {
      * Does nothing if the file does not exist — all getters fall back to
      * their supplied defaults.
      */
-    public static Settings load() {
+    public static synchronized Settings load() {
         Settings s = new Settings();
         Path path = findPath();
         if (path != null && Files.exists(path)) {

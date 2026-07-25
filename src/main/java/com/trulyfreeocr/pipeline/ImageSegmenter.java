@@ -322,11 +322,13 @@ public class ImageSegmenter {
             }
         }
 
-        // Build result: fillColor for foreground, origPixels for background
+        // Build result: fillColor for foreground (within radius), white for beyond radius, origPixels for background
         int[] resultPixels = new int[len];
         for (int i = 0; i < len; i++) {
             if (dist[i] == 0) {
                 resultPixels[i] = origPixels[i];
+            } else if (radius > 0 && dist[i] > radius) {
+                resultPixels[i] = 0xFFFFFFFF; // white for foreground pixels beyond inpaint radius
             } else {
                 resultPixels[i] = fillColor[i];
             }
