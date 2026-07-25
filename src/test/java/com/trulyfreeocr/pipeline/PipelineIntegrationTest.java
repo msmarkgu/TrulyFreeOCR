@@ -13,11 +13,18 @@ import java.util.List;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
+import com.trulyfreeocr.model.TextBlock;
 import com.trulyfreeocr.model.SegmentedImage;
 import com.trulyfreeocr.pipeline.PaddleOcrOnnxProvider;
 
@@ -271,5 +278,66 @@ class PipelineIntegrationTest {
         g.drawImage(img, 0, 0, null);
         g.dispose();
         return gray;
+    }
+
+    /**
+     * Creates a searchable PDF with the given text rendered as invisible text
+     * on a white background. This simulates a PDF that already has a text layer
+     * (the input that --mrc-only expects).
+     */
+    private File createSearchablePdf(String text) throws IOException {
+        File pdf = File.createTempFile("searchable-test-", ".pdf");
+        pdf.deleteOnExit();
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(new PDRectangle(612, 792));
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.beginText();
+                cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                cs.setRenderingMode(RenderingMode.NEITHER);
+                cs.newLineAtOffset(72, 700);
+                cs.showText(text);
+                cs.endText();
+            }
+            doc.save(pdf);
+        }
+        return pdf;
+    }
+
+    @Test
+    void mrcOnly_extractPage_producesSearchableOutput() throws IOException {
+        String expectedText = "The quick brown fox jumps over the lazy dog";
+        File source = createSearchablePdf(expectedText);
+
+        // Verify source is searchable
+        try (PDDocument srcDoc = Loader.loadPDF(source)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String srcText = stripper.getText(srcDoc);
+            assertTrue(srcText.contains("brown"), "Source should be searchable");
+        }
+
+        // Render → segment → reassemble with source text (simulating mrc-only flow)
+        var pages = extractor.extractPages(source);
+        assertFalse(pages.isEmpty(), "Should extract pages from source");
+
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+
+        // Simulate mrc-only: create PageResult from extracted text
+        List<TextBlock> blocks = List.of(
+            new TextBlock(expectedText,
+                new java.awt.Rectangle(72, 680, 400, 20), 100.0));
+        PageResult pr = new PageResult(0,
+            pages.get(0).getWidth(), pages.get(0).getHeight(), blocks);
+
+        try (PDDocument output = assembler.assemble(source, backgrounds, null,
+                List.of(pr), false)) {
+            PDFTextStripper outStripper = new PDFTextStripper();
+            String outText = outStripper.getText(output);
+            assertTrue(outText.contains("brown"),
+                "MRC-only output should preserve searchable text");
+            assertTrue(outText.contains("fox"),
+                "MRC-only output should contain 'fox'");
+        }
     }
 }

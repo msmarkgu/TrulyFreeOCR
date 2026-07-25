@@ -337,17 +337,6 @@ public class TrulyFreeOCR implements Callable<Integer> {
             System.out.println("  Words:  " + srcWords + " (source text)");
         }
 
-        // Pre-extract existing text when in mrc-only mode
-        List<PageResult> existingText = null;
-        if (mrcOnly) {
-            if (srcWords > 0) {
-                System.out.println("  Extracting existing text from source PDF...");
-                existingText = extractExistingText(source, pageCount, dpi);
-            } else {
-                System.out.println("  Warning: Source has no existing text; OCR will still run.");
-            }
-        }
-
         long totalStart = System.nanoTime();
 
         System.out.println("  Processing " + pageCount + " pages...");
@@ -383,7 +372,6 @@ public class TrulyFreeOCR implements Callable<Integer> {
                 BufferedImage page = pageProvider.getPage(i);
 
                 final int pageIdx = i;
-                final List<PageResult> existingTextRef = existingText;
                 ocrFutures.add(ocrExecutor.submit(() -> {
                     long localStart = System.nanoTime();
                     try {
@@ -406,10 +394,10 @@ public class TrulyFreeOCR implements Callable<Integer> {
                         ImageIO.write(background, "bmp",
                             new File(tempDir, "bg-" + pageIdx + ".bmp"));
 
-                        // OCR or use pre-extracted existing text
+                        // OCR or extract existing text per-page
                         PageResult r;
-                        if (existingTextRef != null) {
-                            r = existingTextRef.get(pageIdx);
+                        if (mrcOnly) {
+                            r = TextPositionCollector.extractPage(source, pageIdx, dpi);
                         } else {
                             r = ocrProvider.ocr(gray, pageIdx);
                         }
@@ -526,37 +514,60 @@ public class TrulyFreeOCR implements Callable<Integer> {
     }
 
     /**
-     * Extracts existing text from a searchable PDF using PDFBox's PDFTextStripper
-     * with position-aware character grouping.  Used by --mrc-only to skip OCR.
-     */
-    private static List<PageResult> extractExistingText(PDDocument doc, int pageCount, float dpi) throws IOException {
-        TextPositionCollector collector = new TextPositionCollector(pageCount);
-        collector.setStartPage(1);
-        collector.setEndPage(pageCount);
-        collector.setSortByPosition(true);
-        collector.writeText(doc, new java.io.StringWriter());
-        return collector.buildResults(doc, dpi);
-    }
-
-    /**
      * Custom PDFTextStripper that captures per-character positions
      * grouped by page, then assembles word-level TextBlock entries.
      */
     private static class TextPositionCollector extends PDFTextStripper {
         private final java.util.List<java.util.List<CharPos>> pageChars;
+        private final int pageOffset;
 
+        /** Multi-page constructor: extracts text from all pages. */
         TextPositionCollector(int pageCount) throws IOException {
             super();
+            this.pageOffset = -1;
             pageChars = new java.util.ArrayList<>(pageCount);
             for (int i = 0; i < pageCount; i++) {
                 pageChars.add(new java.util.ArrayList<>());
             }
         }
 
+        /** Single-page constructor: extracts text from one page only. */
+        private TextPositionCollector(int pageOffset, boolean singlePage) throws IOException {
+            super();
+            this.pageOffset = pageOffset;
+            pageChars = new java.util.ArrayList<>(1);
+            pageChars.add(new java.util.ArrayList<>());
+        }
+
+        /**
+         * Extract text from a single page of a searchable PDF.
+         * Each worker creates its own instance — thread-safe.
+         */
+        static PageResult extractPage(PDDocument doc, int pageIdx, float dpi) throws IOException {
+            TextPositionCollector c = new TextPositionCollector(pageIdx, true);
+            c.setStartPage(pageIdx + 1);
+            c.setEndPage(pageIdx + 1);
+            c.setSortByPosition(true);
+            c.writeText(doc, new java.io.StringWriter());
+            PDPage pdPage = doc.getPage(pageIdx);
+            PDRectangle cb = pdPage.getCropBox();
+            int imgW = Math.round(cb.getWidth() * dpi / 72f);
+            int imgH = Math.round(cb.getHeight() * dpi / 72f);
+            return new PageResult(pageIdx, imgW, imgH,
+                c.buildWordBlocks(c.pageChars.get(0), dpi));
+        }
+
         @Override
         protected void processTextPosition(TextPosition text) {
             int pageIdx = getCurrentPageNo() - 1;
-            if (pageIdx < 0 || pageIdx >= pageChars.size()) return;
+            if (pageOffset >= 0) {
+                // Single-page mode: skip chars from other pages
+                if (pageIdx != pageOffset) return;
+                pageIdx = 0;
+            } else {
+                // Multi-page mode: bounds check
+                if (pageIdx < 0 || pageIdx >= pageChars.size()) return;
+            }
             String ch = text.getUnicode();
             if (ch == null || ch.isEmpty()) return;
             if (ch.chars().allMatch(Character::isWhitespace)) return;
