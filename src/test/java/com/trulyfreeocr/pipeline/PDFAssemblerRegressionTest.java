@@ -591,4 +591,32 @@ class PDFAssemblerRegressionTest {
                 output.getDocumentInformation().getProducer());
         }
     }
+
+    /**
+     * Verifies that the assembler does not crash when TextBlocks contain
+     * characters not supported by the default Helvetica font (e.g. CJK).
+     * The try-catch fallback should estimate width and skip unsupported glyphs.
+     */
+    @Test
+    void addPage_nonLatinGlyphs_doesNotThrow() throws IOException {
+        File source = createSourcePdf();
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+
+        List<TextBlock> blocks = new ArrayList<>();
+        blocks.add(new TextBlock("Hello", new Rectangle(10, 100, 120, 40), 0.95));
+        blocks.add(new TextBlock("\u4f60\u597d\u4e16\u754c", new Rectangle(10, 200, 150, 40), 0.95));
+        blocks.add(new TextBlock("\u3053\u3093\u306b\u3061\u306f", new Rectangle(10, 300, 140, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+
+        PDFAssembler assembler = new PDFAssembler();
+        try (PDDocument doc = assembler.assemble(source,
+                Collections.singletonList(bg), null,
+                Collections.singletonList(ocr), false)) {
+            assertNotNull(doc, "Assembled document should not be null");
+            assertEquals(1, doc.getNumberOfPages());
+        }
+    }
 }
