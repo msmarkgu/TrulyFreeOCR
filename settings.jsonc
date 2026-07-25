@@ -111,6 +111,12 @@
     //   -s = refine smearing
     "jbig2enc.flags": "-p -s",
 
+    // ===== Intermediate Format =====
+    // Format for temp background/mask images during processing.
+    //   "bmp" = fast, no compression, ~26 MB/page at 300 DPI (default)
+    //   "png" = slower, 4-10x smaller files, better for slow disk / large docs
+    "pipeline.intermediate.format": "bmp",
+
     // ===== PDF/A =====
     // Enable PDF/A-2b output (adds XMP metadata, sRGB OutputIntent).
     // Override via --pdfa CLI flag.
