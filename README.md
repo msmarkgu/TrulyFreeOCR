@@ -8,45 +8,19 @@ All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 ---
 
-## Who It's For
-
-- **Commercial / Enterprise teams** — All dependencies are Apache 2.0 / BSD / MIT.
-  No GPL, no AGPL, no proprietary components — no obligation to open source your code.
-
-- **DevOps / Deployment engineers** — Every dependency (Gradle, JDK, Tesseract, Leptonica,
-  jbig2enc, language data) downloads into project subdirectories via `bootstrap.sh`
-  (Linux/macOS) or `bootstrap.bat` (Windows). Zero admin rights required: no sudo,
-  no brew, no apt-get install, no Windows installer wizard.
-  The entire stack is self-contained: copy the folder and it runs on any machine.
-
-- **Document processing pipeline** — Headless CLI with JSONC settings file.
-  All parameters (DPI, language, PSM, MRC on/off) are scriptable. The fat JAR
-  has zero Java-classpath fuss — one file to copy, one command to run.
-
-- **High-volume document scanning** — MRC compression reduces PDF size ~80–90%
-  (5–10× smaller) versus JPEG-only while keeping text razor-sharp via the JBIG2
-  foreground mask. Ships with 7 trained language models (English, French, German, Spanish,
-  Chinese Simplified, Chinese Traditional, Japanese). Add more by downloading
-  Tesseract traineddata files.
-
-- **Open-source contributors / integrators** — Pure-Java segmentation (no
-  Leptonica native dependency). Clean pipeline API with PageExtractor →
-  ImageSegmenter → OCREngine → PDFAssembler. Each component has focused unit
-  tests and a well-defined contract.
-
----
-
 ## Why TrulyFreeOCR
 
 A survey of 25+ open-source OCR projects (see [`docs/opensource-ocr-tools.md`](docs/opensource-ocr-tools.md)) found none that combine all five requirements for production document processing:
 
-- **Business-friendly license** — Apache 2.0 (no disclosure obligations)
-- **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local; no sudo, no Python, no system deps
-- **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project)
-- **Searchable PDF output** — invisible text layer + optional [PDF/A-2b](https://www.loc.gov/preservation/digital/formats/fdd/fdd000322.shtml) — most popular standard of [PDF/A](https://en.wikipedia.org/wiki/PDF/A)
-- **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine
+- **Business-friendly license** — Apache 2.0 (no disclosure obligations). Safe for commercial and enterprise use — no GPL, no AGPL, no proprietary components.
+- **Self-contained** — single fat JAR + `bootstrap.sh`/`bootstrap.bat`; Gradle + JDK + native binaries all project-local. No sudo, no Python, no system deps. Copy the folder and it runs anywhere — ideal for DevOps and deployment pipelines.
+- **MRC compression** — JBIG2/CCITT foreground mask + JPEG/PNG background (JBIG2 binary included in project). Reduces PDF size 80–90% (5–10× smaller) versus JPEG-only while keeping text razor-sharp.
+- **Searchable PDF output** — invisible text layer + optional [PDF/A-2b](https://www.loc.gov/preservation/digital/formats/fdd/fdd000322.shtml). Headless CLI with JSONC settings, fully scriptable for document processing pipelines. Ships with 7 trained language models (English, French, German, Spanish, Chinese Simplified, Chinese Traditional, Japanese); add more by downloading Tesseract traineddata files.
+- **No cloud / no GPU** — CPU-only, fully offline, zero data leaves the machine.
 
-Where other tools fall short:
+For contributors: pure-Java segmentation (no Leptonica native dependency), clean pipeline API (PageExtractor → ImageSegmenter → OCREngine → PDFAssembler), focused unit tests per component.
+
+### Where other tools fall short
 
 - **VLM models** ([DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [GLM-OCR](https://github.com/zai-org/GLM-OCR), [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), [Chandra OCR](https://github.com/chandra-ai/chandra-ocr), etc.) produce the best OCR accuracy but require GPUs and only emit JSON/Markdown — no PDF output at all.
 - **[OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF)** covers the full PDF pipeline but needs Ghostscript + Python + system deps; its MPL-2.0 license requires publishing modifications.
@@ -85,14 +59,20 @@ and Windows.
    bootstrap.bat
    ```
    This will install into local project subdirectories:
+
+<details>
+<summary>What gets installed (8 components, all under <code>deps/</code>)</summary>
+
    - OpenJDK 21 LTS → `deps/jdk/`
    - Gradle 8.0.1 → `deps/gradle/`
-    - Tesseract OCR engine → `deps/tesseract/$OS/`
-    - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn, osd) → `deps/tesseract/tessdata/`
-    - jbig2enc for JBIG2 compression → `deps/jbig2enc/$OS/`
-    - All required shared libraries → `deps/tesseract/$OS/lib/` and `deps/jbig2enc/$OS/lib/`
-    - (Optional) PP-OCRv6 ONNX models for PaddleOCR engine → add `--paddle` flag to bootstrap
-    - Noto Sans SC CJK font (SIL OFL 1.1) → `deps/fonts/`
+   - Tesseract OCR engine → `deps/tesseract/$OS/`
+   - Tesseract language data (eng, fra, deu, spa, chi_sim, chi_tra, jpn, osd) → `deps/tesseract/tessdata/`
+   - jbig2enc for JBIG2 compression → `deps/jbig2enc/$OS/`
+   - All required shared libraries → `deps/tesseract/$OS/lib/` and `deps/jbig2enc/$OS/lib/`
+   - (Optional) PP-OCRv6 ONNX models for PaddleOCR engine → add `--paddle` flag to bootstrap
+   - Noto Sans SC CJK font (SIL OFL 1.1) → `deps/fonts/`
+
+</details>
 
 <details>
 <summary>Resulting <code>deps/</code> structure (Linux shown; macOS/Windows analogous)</summary>
@@ -175,6 +155,72 @@ ls ./deps/tesseract/tessdata/*.traineddata
 
 If these files and binaries exist, the installation is complete.
 
+### Usage
+
+Build the fat JAR:
+```bash
+./gradlew build
+```
+
+Basic usage (recommended — auto-builds, uses local JDK):
+```bash
+./run.sh input.pdf -o output.pdf
+```
+
+Or use an image file:
+```bash
+./run.sh scan.png -o output.pdf
+```
+
+If you prefer to invoke the JAR directly with the project-local JDK:
+```bash
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf -o output.pdf
+```
+
+Common options:
+```bash
+# Set DPI (default: 300)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --dpi 300
+
+# Set language (default: eng)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --lang spa
+
+# Disable MRC compression
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --no-mrc
+
+# Use 2 concurrent OCR threads (default: 1)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --threads 2
+
+# Export recognized text to a file
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --txt-output output.txt
+
+# Export word bounding boxes as JSON
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --bbox-output words.json
+
+# Apply MRC compression to an existing searchable PDF (skip OCR)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar existing-searchable.pdf --mrc-only -o compressed.pdf
+
+# Generate PDF/A-2b output (embeds sRGB OutputIntent and XMP metadata)
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --pdfa -o output-pdfa.pdf
+
+# OCR a Chinese PDF (auto-detects bundled Noto Sans SC font for text layer)
+./run.sh chinese-scan.pdf --lang chi_sim -o chinese-searchable.pdf
+
+# Chinese with PaddleOCR engine (often better for CJK recognition)
+./run.sh chinese-scan.pdf --ocr-engine paddle --lang chi_sim -o chinese-searchable.pdf
+```
+
+For more options, run:
+```bash
+./deps/jdk/bin/java -jar build/trulyfreeocr.jar --help
+```
+
+See [`docs/test-runs.md`](docs/test-runs.md) for example benchmark runs with
+real command lines showing `--threads`, `--no-mrc`, and MRC-enabled output
+with timing and file-size results.
+
+CLI flags override `settings.jsonc` values, which override hardcoded defaults.
+
 ### PaddleOCR Engine (Optional)
 
 TrulyFreeOCR supports PaddleOCR as an alternative OCR backend using PP-OCRv6 ONNX models
@@ -198,9 +244,9 @@ Or using the JAR directly:
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf --ocr-engine paddle -o output.pdf
 ```
 
-The `--language` flag also works with PaddleOCR to select the character dictionary:
+The `--lang` flag also works with PaddleOCR to select the character dictionary:
 ```bash
-./run.sh input.pdf --ocr-engine paddle --language eng -o output.pdf
+./run.sh input.pdf --ocr-engine paddle --lang eng -o output.pdf
 ```
 
 Note: PaddleOCR is currently CPU-only via ONNX Runtime Java. Per-page time
@@ -211,7 +257,7 @@ Tesseract for the small models. Performance can improve with model optimizations
 ### CJK Support
 
 TrulyFreeOCR supports CJK (Chinese, Japanese, Korean) text in the invisible text
-layer of output PDFs. When a CJK language is detected (`--language chi_sim`,
+layer of output PDFs. When a CJK language is detected (`--lang chi_sim`,
 `chi_tra`, `jpn`, or `kor`), the tool auto-detects a suitable font:
 
 1. **Bundled font** — `deps/fonts/NotoSansSC-Regular.ttf` (Noto Sans SC, SIL OFL 1.1)
@@ -222,7 +268,7 @@ layer of output PDFs. When a CJK language is detected (`--language chi_sim`,
 
 To use a custom font, set `pdf.fontPath` in `settings.jsonc` or via CLI:
 ```bash
-./run.sh input.pdf --language chi_sim -o output.pdf  # auto-detect
+./run.sh input.pdf --lang chi_sim -o output.pdf  # auto-detect
 ```
 
 Or with an explicit font:
@@ -234,77 +280,6 @@ Or with an explicit font:
 - Font must be TrueType (`.ttf`) with a `glyf` table. OTF/CFF fonts (e.g., most
   Noto Sans CJK `.ttc` system installs) cause PDFBox save errors and are skipped.
 - The bundled Noto Sans SC variable font (17 MB) is the recommended option.
-
-### Usage
-
-Generate a sample test PDF, or use your own:
-```bash
-./gradlew generateTestPdfs
-```
-
-Build the fat JAR:
-```bash
-./gradlew build
-```
-
-Basic usage (recommended — auto-builds, uses local JDK):
-```bash
-./run.sh tests/simple-text.pdf -o output.pdf
-```
-
-Or use an image file:
-```bash
-./run.sh scan.png -o output.pdf
-```
-
-If you prefer to invoke the JAR directly with the project-local JDK:
-```bash
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf -o output.pdf
-```
-
-Common options:
-```bash
-# Set DPI (default: 300)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --dpi 300
-
-# Set language (default: eng)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --language spa
-
-# Disable MRC compression
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --no-mrc
-
-# Use 2 concurrent OCR threads (default: 1)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --threads 2
-
-# Export recognized text to a file
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --txt-output output.txt
-
-# Export word bounding boxes as JSON
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --bbox-output words.json
-
-# Apply MRC compression to an existing searchable PDF (skip OCR)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar existing-searchable.pdf --mrc-only -o compressed.pdf
-
-# Generate PDF/A-2b output (embeds sRGB OutputIntent and XMP metadata)
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --pdfa -o output-pdfa.pdf
-
-# OCR a Chinese PDF (auto-detects bundled Noto Sans SC font for text layer)
-./run.sh chinese-scan.pdf --language chi_sim -o chinese-searchable.pdf
-
-# Chinese with PaddleOCR engine (often better for CJK recognition)
-./run.sh chinese-scan.pdf --ocr-engine paddle --language chi_sim -o chinese-searchable.pdf
-```
-
-For more options, run:
-```bash
-./deps/jdk/bin/java -jar build/trulyfreeocr.jar --help
-```
-
-See [`docs/test-runs.md`](docs/test-runs.md) for example benchmark runs with
-real command lines showing `--threads`, `--no-mrc`, and MRC-enabled output
-with timing and file-size results.
-
-CLI flags override `settings.jsonc` values, which override hardcoded defaults.
 
 ---
 
@@ -388,7 +363,7 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 | `output.file` | `output.pdf` | Default output file path |
 | `jbig2enc.flags` | `-p -s` | Flags passed to the jbig2enc binary |
 
-CLI flags that override corresponding settings: `--dpi`, `--language`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--txt-output`, `--bbox-output`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--ocr-engine`, `--settings` (path to a custom settings file).
+CLI flags that override corresponding settings: `--dpi`, `--lang`, `--psm`, `--no-mrc`, `--pdfa`, `--threads`, `--txt-output`, `--bbox-output`, `--native-dir`, `--tessdata-dir`, `-o`/`--output`, `--ocr-engine`, `--settings` (path to a custom settings file).
 
 ---
 
