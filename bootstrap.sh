@@ -330,7 +330,22 @@ if [ "$PADDLE" = true ]; then
   fi
 fi
 
-# ── 6. Download jbig2enc (macOS only) ──────────────────────────────────────────
+# ── 6. Download bundled CJK font for invisible text layer ────────────────────
+# Noto Sans SC (SIL OFL 1.1) — covers Latin + CJK with TrueType outlines
+# Required for PDFBox text subsetting (OTF/CFF fonts cause save errors).
+FONTS_DIR="$SCRIPT_DIR/deps/fonts"
+CJK_FONT="$FONTS_DIR/NotoSansSC-Regular.ttf"
+CJK_FONT_URL="https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf"
+mkdir -p "$FONTS_DIR"
+if [ "$FORCE_DOWNLOAD" = true ] || [ ! -f "$CJK_FONT" ]; then
+  echo "Downloading Noto Sans SC CJK font (~34 MB)..."
+  curl -fsSL -o "$CJK_FONT" "$CJK_FONT_URL"
+  echo "Noto Sans SC downloaded to $CJK_FONT ($(du -h "$CJK_FONT" | cut -f1))"
+else
+  echo "Noto Sans SC already present in $FONTS_DIR"
+fi
+
+# ── 7. Download jbig2enc (macOS only) ──────────────────────────────────────────
 # Linux: handled via apt-get download above. macOS falls back to Homebrew.
 case "$OS" in
   mac)
@@ -340,7 +355,7 @@ case "$OS" in
     ;;
 esac
 
-# ── 7. Build project ────────────────────────────────────────────────────────
+# ── 8. Build project ────────────────────────────────────────────────────────
 echo ""
 echo "── Bootstrap complete ──"
 echo "Run:  ./run.sh input.pdf -o output.pdf"

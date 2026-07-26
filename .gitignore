@@ -39,3 +39,4 @@ temp/
 bin/
 output*.*
 *.class
+*.log
