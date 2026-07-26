@@ -4,7 +4,15 @@ Business-friendly open source OCR tool to produce fully searchable and highly co
 All runtime dependencies use permissive licenses (Apache 2.0 / MIT / BSD).
 
 **Input**: Any PDF or image (PNG/JPEG/TIFF/BMP/GIF)<br>
-**Output**: Fully searchable, MRC-compressed PDF ([Mixed Raster Content](https://en.wikipedia.org/wiki/Mixed_raster_content))
+**Output**: Fully searchable, MRC-compressed PDF ([Mixed Raster Content](#mixed-raster-content-mrc-compression))
+
+### Quick Start
+```bash
+git clone https://github.com/msmarkgu/TrulyFreeOCR.git
+cd TrulyFreeOCR
+./bootstrap.sh        # installs JDK, Gradle, Tesseract, jbig2enc, CJK font (~150 MB)
+./run.sh input.pdf -o output.pdf
+```
 
 ---
 
@@ -22,15 +30,28 @@ For contributors: pure-Java segmentation (no Leptonica native dependency), clean
 
 ### Where other tools fall short
 
-- **VLM models** ([DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR), [GLM-OCR](https://github.com/zai-org/GLM-OCR), [Unlimited-OCR](https://github.com/baidu/Unlimited-OCR), [Chandra OCR](https://github.com/chandra-ai/chandra-ocr), etc.) produce the best OCR accuracy but require GPUs and only emit JSON/Markdown — no PDF output at all.
-- **[OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF)** covers the full PDF pipeline but needs Ghostscript + Python + system deps; its MPL-2.0 license requires publishing modifications.
-- **[MinerU](https://github.com/opendatalab/MinerU)** is the most popular document extraction tool (74k★) but outputs Markdown/JSON only, requires Python + model downloads, and its custom license restricts deployments exceeding 100M MAU / $20M revenue.
-- **[Umi-OCR](https://github.com/hiroi-sora/Umi-OCR)** makes a nice desktop GUI but has no MRC compression, no PDF/A, and is Windows-focused.
-- **[NAPS2](https://github.com/cyanfish/naps2)** is a desktop scanning app with OCR, but uses GPL 2.0, requires .NET runtime, and has no MRC compression, no PDF/A, no headless server mode.
-- **[paperless-ngx](https://github.com/paperless-ngx/paperless-ngx)** is a full self-hosted DMS with ML classification (42k★), but GPL-3.0 requires full application source disclosure, needs Django + DB + Redis, and lacks MRC compression and PDF/A.
-- **[LlamaParse](https://github.com/run-llama/llama_index)** (LlamaIndex) / **[Unstructured](https://github.com/Unstructured-IO/unstructured)** are cloud/ETL tools for LLM ingestion, with per-page costs (LlamaParse) or local Python deps, and produce JSON/Markdown — not searchable PDFs.
-- **[EasyOCR](https://github.com/JaidedAI/EasyOCR) / [docTR](https://github.com/mindee/doctr) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR) / [tesseract.js](https://github.com/naptha/tesseract.js)** are OCR libraries, not PDF tools — they extract text but produce no searchable PDF.
-- **[surya](https://github.com/VikParuchuri/surya) / [Marker](https://github.com/VikParuchuri/marker) / [MonkeyOCR](https://github.com/Yuliang-Liu/MonkeyOCR)** have non-commercial model weight restrictions, making them unsuitable for commercial deployment.
+<details>
+<summary>Expand to see comparison with the other tools</summary>
+
+| Tool | License | Output | GPU | Self-contained | MRC | PDF/A |
+|---|---|---|---|---|---|---|
+| [VLM models](https://github.com/deepseek-ai/DeepSeek-OCR) (DeepSeek-OCR, GLM-OCR, etc.) | Varies | JSON / Markdown | Required | No | No | No |
+| [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF) | MPL 2.0 | Searchable PDF | No | No (Ghostscript + Python) | No | No |
+| [MinerU](https://github.com/opendatalab/MinerU) | Custom¹ | Markdown / JSON | Optional | No (Python + models) | No | No |
+| [Umi-OCR](https://github.com/hiroi-sora/Umi-OCR) | AGPL 3.0 | Text / JSON | No | No (Windows only) | No | No |
+| [NAPS2](https://github.com/cyanfish/naps2) | GPL 2.0 | Searchable PDF | No | No (.NET runtime) | No | No |
+| [paperless-ngx](https://github.com/paperless-ngx/paperless-ngx) | GPL 3.0 | Searchable PDF | Optional | No (Django + DB) | No | No |
+| [LlamaParse](https://github.com/run-llama/llama_index) / [Unstructured](https://github.com/Unstructured-IO/unstructured) | Source-available | JSON / Markdown | Varies | No (cloud / Python) | No | No |
+| [EasyOCR](https://github.com/JaidedAI/EasyOCR) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) / [RapidOCR](https://github.com/RapidAI/RapidOCR) / [tesseract.js](https://github.com/naptha/tesseract.js) | Apache 2.0 | Text (no PDF) | Optional | No (Python / Node) | No | No |
+| [surya](https://github.com/VikParuchuri/surya) / [Marker](https://github.com/VikParuchuri/marker) | Non-commercial² | Markdown / JSON | Required | No (Python) | No | No |
+| **TrulyFreeOCR** | **Apache 2.0** | **Searchable PDF** | **No** | **Yes** | **Yes** | **Yes** |
+
+¹ MinerU custom license restricts deployments >100M MAU / $20M revenue.
+² surya/Marker/MonkeyOCR model weights prohibit commercial use.
+
+</details>
+
+<br>
 
 TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and no GPU required. Simply run the self-contained fat JAR, input a PDF or image, and get a highly compressed, fully searchable PDF out.
 
@@ -39,6 +60,8 @@ TrulyFreeOCR fills the gap: no license worries, no data sent to the cloud, and n
 ## Getting Started
 
 ### Installation
+
+**Prerequisites:** `git`, `curl`, `tar`, `unzip`, and `bash` (or a terminal emulator on Windows). These are pre-installed on most Linux/macOS systems. Windows 10+ includes `curl` and `tar` natively; `bash` is available via Git Bash or WSL.
 
 **No admin rights needed** — every dependency is downloaded into project
 subdirectories and stays there. The bootstrap script works on Linux, macOS,
@@ -164,17 +187,26 @@ Build the fat JAR:
 
 Basic usage (recommended — auto-builds, uses local JDK):
 ```bash
+# Linux / macOS
 ./run.sh input.pdf -o output.pdf
+
+# Windows (Git Bash, WSL, or PowerShell)
+run.bat input.pdf -o output.pdf
 ```
 
 Or use an image file:
 ```bash
-./run.sh scan.png -o output.pdf
+./run.sh scan.png -o output.pdf    # Linux / macOS
+run.bat scan.png -o output.pdf     # Windows
 ```
 
 If you prefer to invoke the JAR directly with the project-local JDK:
 ```bash
+# Linux / macOS
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar input.pdf -o output.pdf
+
+# Windows
+deps\jdk\bin\java.exe -jar build\libs\trulyfreeocr.jar input.pdf -o output.pdf
 ```
 
 Common options:
@@ -529,6 +561,7 @@ the project-local shared libraries are used instead of system-wide ones.
 | 15 | PaddleOCR CLI integration (`--ocr-engine paddle`) | Done |
 | 16 | PaddleOCR multi-language support | Done |
 | 17 | CJK text layer (Noto Sans SC auto-detect) | Done |
+| 18 | `--mrc-only` mode (compress existing searchable PDFs) | Done |
 
 </details>
 
