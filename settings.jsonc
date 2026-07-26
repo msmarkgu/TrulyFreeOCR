@@ -128,7 +128,12 @@
     "pdf.pdfa.fontPath": "",
 
     // ===== PDF Assembly =====
-    // Standard 14 font for the invisible OCR text layer.
+    // Path to a TrueType/OpenType font for the invisible text layer.
+    // Required for CJK languages (Chinese, Japanese, Korean).
+    // When empty, auto-detects a system CJK font (Noto Sans CJK, etc.).
+    "pdf.fontPath": "",
+
+    // Standard 14 font for the invisible OCR text layer (Latin-only).
     // The Standard 14 are Type1 fonts guaranteed in every PDF viewer
     // (defined by the PDF spec), so they never need embedding, keeping
     // the output file small.

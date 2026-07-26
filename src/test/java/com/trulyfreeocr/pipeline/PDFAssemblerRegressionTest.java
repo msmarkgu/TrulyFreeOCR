@@ -524,7 +524,7 @@ class PDFAssemblerRegressionTest {
         masks.add(fgMask);
 
         PDFAssembler assembler = new PDFAssembler();
-        assembler.setPdfaFont(fontFile);
+        assembler.setFont(fontFile);
 
         File outputFile = new File(tempDir, "font-cache-output.pdf");
         PDDocument doc = assembler.assemble(source, bgs, masks, ocrResults, true);

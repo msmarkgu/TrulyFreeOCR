@@ -92,6 +92,7 @@ and Windows.
     - jbig2enc for JBIG2 compression → `deps/jbig2enc/$OS/`
     - All required shared libraries → `deps/tesseract/$OS/lib/` and `deps/jbig2enc/$OS/lib/`
     - (Optional) PP-OCRv6 ONNX models for PaddleOCR engine → add `--paddle` flag to bootstrap
+    - Noto Sans SC CJK font (SIL OFL 1.1) → `deps/fonts/`
 
 <details>
 <summary>Resulting <code>deps/</code> structure (Linux shown; macOS/Windows analogous)</summary>
@@ -137,6 +138,8 @@ deps/
             ├── liblept.so -> liblept.so.5
             ├── liblept.so.5 -> liblept.so.5.0.4
             └── liblept.so.5.0.4
+└── fonts/
+    └── NotoSansSC-Regular.ttf  # CJK font for searchable text layer (SIL OFL 1.1)
 ```
 Leptonica (`liblept`) is shared: the canonical copy lives under `tesseract/$OS/lib/`,
 and a copy is also placed under `jbig2enc/$OS/lib/` for the jbig2enc wrapper's
@@ -205,6 +208,33 @@ Note: PaddleOCR is currently CPU-only via ONNX Runtime Java. Per-page time
 Tesseract for the small models. Performance can improve with model optimizations
 (quantization, INT8) and batched page processing.
 
+### CJK Support
+
+TrulyFreeOCR supports CJK (Chinese, Japanese, Korean) text in the invisible text
+layer of output PDFs. When a CJK language is detected (`--language chi_sim`,
+`chi_tra`, `jpn`, or `kor`), the tool auto-detects a suitable font:
+
+1. **Bundled font** — `deps/fonts/NotoSansSC-Regular.ttf` (Noto Sans SC, SIL OFL 1.1)
+   downloaded by `bootstrap.sh`. Covers Latin + CJK characters with TrueType outlines
+   required by PDFBox for font subsetting.
+2. **System font** — Falls back to OS-specific CJK fonts (PingFang on macOS,
+   Microsoft YaHei on Windows, WenQuanYi/Noto on Linux).
+
+To use a custom font, set `pdf.fontPath` in `settings.jsonc` or via CLI:
+```bash
+./run.sh input.pdf --language chi_sim -o output.pdf  # auto-detect
+```
+
+Or with an explicit font:
+```bash
+# Via settings.jsonc: "pdf.fontPath": "/path/to/NotoSansSC-Regular.ttf"
+```
+
+**Requirements:**
+- Font must be TrueType (`.ttf`) with a `glyf` table. OTF/CFF fonts (e.g., most
+  Noto Sans CJK `.ttc` system installs) cause PDFBox save errors and are skipped.
+- The bundled Noto Sans SC variable font (17 MB) is the recommended option.
+
 ### Usage
 
 Generate a sample test PDF, or use your own:
@@ -257,6 +287,12 @@ Common options:
 
 # Generate PDF/A-2b output (embeds sRGB OutputIntent and XMP metadata)
 ./deps/jdk/bin/java -jar build/trulyfreeocr.jar tests/simple-text.pdf --pdfa -o output-pdfa.pdf
+
+# OCR a Chinese PDF (auto-detects bundled Noto Sans SC font for text layer)
+./run.sh chinese-scan.pdf --language chi_sim -o chinese-searchable.pdf
+
+# Chinese with PaddleOCR engine (often better for CJK recognition)
+./run.sh chinese-scan.pdf --ocr-engine paddle --language chi_sim -o chinese-searchable.pdf
 ```
 
 For more options, run:
@@ -344,7 +380,8 @@ All pipeline parameters are configurable via `settings.jsonc` in the project roo
 | `segmenter.tileSize` | `64` | Background normalization tile size (px) |
 | `segmenter.percentile` | `0.95` | Background level percentile per tile |
 | `segmenter.inpaintRadius` | `3` | Inpainting search radius (px) |
-| `pdf.font` | `HELVETICA` | Standard 14 font for OCR text |
+| `pdf.font` | `HELVETICA` | Standard 14 font for OCR text (used when no CJK font is needed) |
+| `pdf.fontPath` | `""` (auto-detect) | Path to a TTF/TTC font for the invisible text layer; auto-detected for CJK languages (chi_sim, chi_tra, jpn, kor). Set explicitly to use a custom font. |
 | `pdf.minFontSize` | `1` | Minimum OCR text font size (pt) |
 | `pdf.pdfa.enabled` | `false` | Enable PDF/A-2b output (adds XMP metadata, sRGB OutputIntent) |
 | `pdf.pdfa.fontPath` | `""` | Path to a TrueType font for embedding in PDF/A; empty = Standard 14 (non-embedded) |
@@ -474,6 +511,7 @@ with no admin rights required.
 | Leptonica | `deps/tesseract/$OS/lib/liblept.so.5`, also copied to `deps/jbig2enc/$OS/lib/` | BSD 2-Clause | https://github.com/DanBloomberg/leptonica |
 | jbig2enc | `deps/jbig2enc/$OS/` (binary + lib) | Apache 2.0 | https://github.com/agl/jbig2enc |
 | Tesseract language data | `deps/tesseract/tessdata/*.traineddata` (eng, fra, spa, deu, chi_sim, chi_tra, jpn, osd) | Apache 2.0 | https://github.com/tesseract-ocr/tessdata |
+| Noto Sans SC | `deps/fonts/NotoSansSC-Regular.ttf` | SIL OFL 1.1 | https://fonts.google.com/noto/specimen/Noto+Sans+SC |
 
 <details>
 <summary>Why GPL + Classpath Exception is business-friendly</summary>
@@ -515,6 +553,7 @@ the project-local shared libraries are used instead of system-wide ones.
 | 14 | PaddleOCR engine (PP-OCRv6 ONNX Runtime Java) | Done |
 | 15 | PaddleOCR CLI integration (`--ocr-engine paddle`) | Done |
 | 16 | PaddleOCR multi-language support | Done |
+| 17 | CJK text layer (Noto Sans SC auto-detect) | Done |
 
 </details>
 
