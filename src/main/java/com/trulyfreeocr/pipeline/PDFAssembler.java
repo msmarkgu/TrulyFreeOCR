@@ -11,7 +11,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -26,6 +28,8 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import org.apache.fontbox.ttf.TrueTypeCollection;
+import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -83,8 +87,8 @@ public class PDFAssembler {
     private final PDType1Font font;
     private final float minFontSize;
     private final MetadataPreserver preserver = new MetadataPreserver();
-    private File pdfaFontFile;
-    private PDFont pdfaFont;
+    private File fontFile;
+    private PDFont dynamicFont;
     private JBIG2Compressor compressor;
     private double backgroundScale;
     private float bgSmoothSigma;
@@ -108,8 +112,8 @@ public class PDFAssembler {
         this.bgSmoothSigma = 0f;
     }
 
-    public void setPdfaFont(File fontFile) {
-        this.pdfaFontFile = fontFile;
+    public void setFont(File fontFile) {
+        this.fontFile = fontFile;
     }
 
     public void setCompressor(JBIG2Compressor compressor) {
@@ -329,13 +333,7 @@ public class PDFAssembler {
             // Layer 3: invisible OCR text
             float scaleX = pageW / ocr.getWidth();
             float scaleY = pageH / ocr.getHeight();
-            PDFont pageFont = font;
-            if (pdfaFontFile != null && pdfaFontFile.exists()) {
-                if (pdfaFont == null) {
-                    pdfaFont = PDType0Font.load(output, pdfaFontFile);
-                }
-                pageFont = pdfaFont;
-            }
+            PDFont pageFont = resolveFont(output);
             cs.beginText();
             cs.setFont(pageFont, minFontSize);
             cs.setRenderingMode(RenderingMode.NEITHER);
@@ -360,7 +358,7 @@ public class PDFAssembler {
                     Matrix.getScaleInstance(sx, 1)));
                 try {
                     cs.showText(tb.getWord());
-                } catch (IllegalArgumentException e) {
+                } catch (Exception e) {
                     skippedGlyphCount++;
                 }
             }
@@ -392,9 +390,10 @@ public class PDFAssembler {
             }
             info.setProducer(newProducer);
         }
-        pdfaFont = null;
+        dynamicFont = null;
         if (skippedGlyphCount > 0) {
             System.out.printf("  Warning: %d words skipped — unsupported glyphs for font.%n", skippedGlyphCount);
+            System.out.println("  Set pdf.fontPath in settings.jsonc to a CJK TTF/OTF file (e.g., NotoSansCJKsc-Regular.otf).");
             skippedGlyphCount = 0;
         }
     }
@@ -468,13 +467,7 @@ public class PDFAssembler {
             // Layer 3: invisible OCR text
             float scaleX = pageW / ocr.getWidth();
             float scaleY = pageH / ocr.getHeight();
-            PDFont pageFont = font;
-            if (pdfaFontFile != null && pdfaFontFile.exists()) {
-                if (pdfaFont == null) {
-                    pdfaFont = PDType0Font.load(output, pdfaFontFile);
-                }
-                pageFont = pdfaFont;
-            }
+            PDFont pageFont = resolveFont(output);
             cs.beginText();
             cs.setFont(pageFont, minFontSize);
             cs.setRenderingMode(RenderingMode.NEITHER);
@@ -499,7 +492,7 @@ public class PDFAssembler {
                     Matrix.getScaleInstance(sx, 1)));
                 try {
                     cs.showText(tb.getWord());
-                } catch (IllegalArgumentException e) {
+                } catch (Exception e) {
                     skippedGlyphCount++;
                 }
             }
@@ -507,6 +500,100 @@ public class PDFAssembler {
         }
 
         return outPage;
+    }
+
+    /**
+     * Resolves the font for the invisible text layer.
+     * Priority: explicit fontFile > auto-detected CJK font > default PDType1Font.
+     * Auto-detect is only attempted if a CJK font is explicitly requested
+     * via fontFile being set.
+     */
+    private PDFont resolveFont(PDDocument output) {
+        // Explicit font path (set via pdf.fontPath or pdf.pdfa.fontPath)
+        if (fontFile != null && fontFile.exists()) {
+            if (dynamicFont == null) {
+                dynamicFont = loadFont(output, fontFile);
+            }
+            if (dynamicFont != null) return dynamicFont;
+        }
+        return font;
+    }
+
+    /**
+     * Loads a TTF/OTF/TTC font file as a PDType0Font.
+     * Handles TrueType Collection (.ttc) files by loading the first font.
+     */
+    private static PDFont loadFont(PDDocument output, File file) {
+        try {
+            String name = file.getName().toLowerCase();
+            if (name.endsWith(".ttc")) {
+                try (TrueTypeCollection ttc = new TrueTypeCollection(file)) {
+                    // Get the first font in the collection
+                    final TrueTypeFont[] firstFont = new TrueTypeFont[1];
+                    ttc.processAllFonts(font -> {
+                        if (firstFont[0] == null) firstFont[0] = font;
+                    });
+                    if (firstFont[0] != null) {
+                        return PDType0Font.load(output, firstFont[0], true);
+                    }
+                }
+            } else {
+                return PDType0Font.load(output, file);
+            }
+        } catch (IOException e) {
+            // Font file exists but PDFBox can't parse it
+        }
+        return null;
+    }
+
+    /**
+     * Finds a CJK font suitable for the invisible text layer.
+     * Priority: bundled font (deps/fonts/) > system font.
+     * Returns the first existing font file, or null if none found.
+     */
+    public static File findCjkFont() {
+        // 1. Bundled font from bootstrap (Noto Sans SC, SIL OFL 1.1)
+        File bundled = new File("deps/fonts/NotoSansSC-Regular.ttf");
+        if (bundled.exists() && bundled.canRead()) return bundled;
+
+        // 2. System fonts
+        com.trulyfreeocr.util.PlatformUtils.Os os = com.trulyfreeocr.util.PlatformUtils.detectOs();
+        String[][] candidates;
+        switch (os) {
+            case MAC:
+                candidates = new String[][]{
+                    {"/System/Library/Fonts/PingFang.ttc"},
+                    {"/System/Library/Fonts/STHeiti Light.ttc"},
+                    {"/Library/Fonts/Arial Unicode.ttf"},
+                    {"/System/Library/Fonts/Apple Color Emoji.ttc"},
+                };
+                break;
+            case WINDOWS:
+                candidates = new String[][]{
+                    {"C:\\Windows\\Fonts\\msyh.ttc"},
+                    {"C:\\Windows\\Fonts\\msyhbd.ttc"},
+                    {"C:\\Windows\\Fonts\\simsun.ttc"},
+                    {"C:\\Windows\\Fonts\\simhei.ttf"},
+                };
+                break;
+            default: // LINUX
+                candidates = new String[][]{
+                    {"/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"},
+                    {"/usr/share/fonts/wqy-microhei/wqy-microhei.ttc"},
+                    {"/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc"},
+                    {"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"},
+                    {"/usr/share/fonts/truetype/arphic/uming.ttc"},
+                    {"/usr/share/fonts/truetype/arphic/ukai.ttc"},
+                };
+                break;
+        }
+        for (String[] path : candidates) {
+            File f = new File(path[0]);
+            if (f.exists() && f.canRead()) {
+                return f;
+            }
+        }
+        return null;
     }
 
     private void addPdfaMetadata(PDDocument doc) throws IOException {

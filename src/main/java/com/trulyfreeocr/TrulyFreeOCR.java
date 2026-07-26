@@ -210,11 +210,24 @@ public class TrulyFreeOCR implements Callable<Integer> {
                     (float) settings.getDouble("pdf.minFontSize", 1.0)
             );
 
-            if (usePdfa) {
-                String fontPath = settings.getString("pdf.pdfa.fontPath", "");
-                if (!fontPath.isEmpty()) {
-                    assembler.setPdfaFont(new File(fontPath));
+            // Font for invisible text layer (supports CJK when set to a TTF/OTF file)
+            String fontPath = settings.getString("pdf.fontPath", "");
+            if (fontPath.isEmpty() && usePdfa) {
+                fontPath = settings.getString("pdf.pdfa.fontPath", "");
+            }
+            // Auto-detect CJK font for CJK languages when no font path is configured
+            if (fontPath.isEmpty()) {
+                String lang = resolvedLang.toLowerCase();
+                if (lang.startsWith("chi") || lang.startsWith("jpn") || lang.startsWith("kor")
+                        || lang.contains("cjk")) {
+                    File cjkFont = PDFAssembler.findCjkFont();
+                    if (cjkFont != null) {
+                        fontPath = cjkFont.getAbsolutePath();
+                    }
                 }
+            }
+            if (!fontPath.isEmpty()) {
+                assembler.setFont(new File(fontPath));
             }
 
             assembler.setCompressor(compressor);
