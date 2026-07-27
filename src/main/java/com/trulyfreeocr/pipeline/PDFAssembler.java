@@ -541,7 +541,7 @@ public class PDFAssembler {
                 return PDType0Font.load(output, file);
             }
         } catch (IOException e) {
-            // Font file exists but PDFBox can't parse it
+            System.out.printf("  Warning: could not load font '%s' — may be OTF/CFF (unsupported). Using built-in Helvetica instead.%n", file.getName());
         }
         return null;
     }
@@ -565,7 +565,7 @@ public class PDFAssembler {
                     {"/System/Library/Fonts/PingFang.ttc"},
                     {"/System/Library/Fonts/STHeiti Light.ttc"},
                     {"/Library/Fonts/Arial Unicode.ttf"},
-                    {"/System/Library/Fonts/Apple Color Emoji.ttc"},
+
                 };
                 break;
             case WINDOWS:
