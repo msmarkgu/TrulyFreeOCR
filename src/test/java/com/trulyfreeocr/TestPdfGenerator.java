@@ -7,6 +7,7 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,9 +20,13 @@ import javax.imageio.ImageIO;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
+import org.apache.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile;
 import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationUnderline;
@@ -65,6 +70,7 @@ public class TestPdfGenerator implements Callable<Integer> {
             makeMultiPage();
             makeTwoColumn();
             makeWithAnnotations();
+            makeWithAttachments();
             makeNoisyScan();
 
             System.out.println("\nDone. Files in " + OUT_DIR + "/");
@@ -324,7 +330,88 @@ public class TestPdfGenerator implements Callable<Integer> {
         System.out.println("  with-annotations.pdf");
     }
 
-    // ── 6. noisy-scan.pdf ───────────────────────────────────────────────
+    // ── 6. with-attachments.pdf ────────────────────────────────────────
+
+    private void makeWithAttachments() throws IOException {
+        Path path = OUT_DIR.resolve("with-attachments.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            // Set document info
+            PDDocumentInformation info = doc.getDocumentInformation();
+            info.setTitle("Attachment Test Document");
+            info.setAuthor("TrulyFreeOCR Test Suite");
+            info.setSubject("Test PDF with embedded file attachments");
+
+            // Add 2 pages with images
+            List<PDPage> pages = new ArrayList<>();
+            String[] titles = {"Page 1: With Attachments", "Page 2: Second Page"};
+            for (int i = 0; i < 2; i++) {
+                BufferedImage img = newPage();
+                Graphics2D g = createGraphics(img);
+                g.setFont(font18);
+                g.drawString(titles[i], MARGIN, MARGIN);
+                g.setFont(font14);
+                g.drawString("This PDF contains embedded file attachments.", MARGIN, MARGIN + 40);
+                g.dispose();
+
+                PDImageXObject pdImg = JPEGFactory.createFromImage(doc, img, 0.95f);
+                PDPage pdPage = new PDPage(new PDRectangle(W, H));
+                doc.addPage(pdPage);
+                pages.add(pdPage);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, pdPage)) {
+                    cs.drawImage(pdImg, 0, 0, W, H);
+                }
+            }
+
+            // Add bookmark
+            PDDocumentOutline outline = new PDDocumentOutline();
+            doc.getDocumentCatalog().setDocumentOutline(outline);
+            for (int i = 0; i < 2; i++) {
+                PDOutlineItem item = new PDOutlineItem();
+                item.setTitle(titles[i]);
+                PDPageFitWidthDestination dest = new PDPageFitWidthDestination();
+                dest.setPage(pages.get(i));
+                item.setDestination(dest);
+                outline.addLast(item);
+            }
+
+            // Add 2 embedded files
+            PDDocumentNameDictionary names = new PDDocumentNameDictionary(doc.getDocumentCatalog());
+            doc.getDocumentCatalog().setNames(names);
+
+            PDEmbeddedFilesNameTreeNode embeddedFilesNode = new PDEmbeddedFilesNameTreeNode();
+            names.setEmbeddedFiles(embeddedFilesNode);
+
+            // Embedded file 1: text file
+            PDEmbeddedFile ef1 = new PDEmbeddedFile(doc);
+            ef1.setSubtype("text/plain");
+            PDComplexFileSpecification spec1 = new PDComplexFileSpecification();
+            spec1.setFile("readme.txt");
+            spec1.setEmbeddedFile(ef1);
+            try (var os = ef1.createOutputStream()) {
+                os.write("This is an embedded text file for testing attachment preservation.".getBytes(StandardCharsets.UTF_8));
+            }
+
+            // Embedded file 2: small data file
+            PDEmbeddedFile ef2 = new PDEmbeddedFile(doc);
+            ef2.setSubtype("application/octet-stream");
+            PDComplexFileSpecification spec2 = new PDComplexFileSpecification();
+            spec2.setFile("data.bin");
+            spec2.setEmbeddedFile(ef2);
+            try (var os = ef2.createOutputStream()) {
+                os.write("binary test data here".getBytes(StandardCharsets.UTF_8));
+            }
+
+            java.util.Map<String, PDComplexFileSpecification> fileMap = new java.util.LinkedHashMap<>();
+            fileMap.put("readme.txt", spec1);
+            fileMap.put("data.bin", spec2);
+            embeddedFilesNode.setNames(fileMap);
+
+            doc.save(path.toFile());
+        }
+        System.out.println("  with-attachments.pdf");
+    }
+
+    // ── 7. noisy-scan.pdf ───────────────────────────────────────────────
 
     private void makeNoisyScan() throws IOException {
         BufferedImage img = newPage();

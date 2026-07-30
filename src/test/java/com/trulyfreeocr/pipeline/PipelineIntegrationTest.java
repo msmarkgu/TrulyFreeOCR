@@ -13,6 +13,8 @@ import java.util.List;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -233,6 +235,36 @@ class PipelineIntegrationTest {
             String text = stripper.getText(output);
             assertFalse(text.trim().isEmpty(),
                     "PaddleOCR two-column output should have searchable text");
+        }
+    }
+
+    @Test
+    void fullPipeline_withAttachments_outputPreservesEmbeddedFiles() throws IOException {
+        File input = new File("tests/with-attachments.pdf");
+        assertTrue(input.exists(), "Test PDF not found: " + input);
+
+        var pages = extractor.extractPages(input);
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+        var ocrResults = processOcr(engine, pages);
+
+        try (PDDocument source = Loader.loadPDF(input);
+             PDDocument output = assembler.assemble(input, backgrounds, null, ocrResults, false)) {
+
+            // Verify embedded files are preserved via finishAssembly -> preserve
+            PDDocumentNameDictionary srcNames = source.getDocumentCatalog().getNames();
+            PDEmbeddedFilesNameTreeNode srcEmbedded = srcNames != null ? srcNames.getEmbeddedFiles() : null;
+            assertNotNull(srcEmbedded, "Source should have embedded files");
+
+            PDDocumentNameDictionary dstNames = output.getDocumentCatalog().getNames();
+            PDEmbeddedFilesNameTreeNode dstEmbedded = dstNames != null ? dstNames.getEmbeddedFiles() : null;
+            assertNotNull(dstEmbedded, "Output should preserve embedded files");
+
+            var srcMap = srcEmbedded.getNames();
+            var dstMap = dstEmbedded.getNames();
+            assertNotNull(srcMap, "Source should have embedded file names");
+            assertNotNull(dstMap, "Output should have embedded file names");
+            assertEquals(srcMap.size(), dstMap.size(), "Embedded file count should match");
         }
     }
 
