@@ -371,10 +371,12 @@ public class PDFAssembler {
     /**
      * Copies metadata from the source and optionally adds PDF/A-2b info.
      * Must be called after all {@link #addPage} calls are complete.
+     *
+     * @return Counts of copied metadata elements, or null if no source was provided.
      */
-    public void finishAssembly(PDDocument output, PDDocument source,
+    public MetadataPreserver.PreserveResult finishAssembly(PDDocument output, PDDocument source,
                                List<PDPage> outPages, boolean usePdfa) throws IOException {
-        preserver.preserve(source, output, outPages);
+        MetadataPreserver.PreserveResult preserved = preserver.preserve(source, output, outPages);
         if (usePdfa) {
             addPdfaMetadata(output);
         }
@@ -396,6 +398,7 @@ public class PDFAssembler {
             System.out.println("  Set pdf.fontPath in settings.jsonc to a CJK TTF/OTF file (e.g., NotoSansCJKsc-Regular.otf).");
             skippedGlyphCount = 0;
         }
+        return preserved;
     }
 
     private PDImageXObject createJbig2ImageXObject(PDDocument doc, JBIG2Compressor.CompressionResult result) throws IOException {

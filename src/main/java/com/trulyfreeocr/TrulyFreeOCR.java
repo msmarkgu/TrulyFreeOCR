@@ -514,7 +514,13 @@ public class TrulyFreeOCR implements Callable<Integer> {
 
                 // Finalize: copy metadata, add PDF/A if needed
                 System.out.println("  Finalizing document...");
-                assembler.finishAssembly(output, source, outPages, usePdfa);
+                var preserved = assembler.finishAssembly(output, source, outPages, usePdfa);
+                if (preserved.outlines() > 0)
+                    System.out.println("  Bookmarks:  " + preserved.outlines() + " (preserved)");
+                if (preserved.annotations() > 0)
+                    System.out.println("  Links:      " + preserved.annotations() + " (preserved)");
+                if (preserved.embeddedFiles() > 0)
+                    System.out.println("  Attachments: " + preserved.embeddedFiles() + " (preserved)");
                 File tempOutput = File.createTempFile("tfocr-", ".pdf", outputFile.getParentFile());
                 try {
                     output.save(tempOutput);
