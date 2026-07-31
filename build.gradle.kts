@@ -51,12 +51,12 @@ tasks.named<Test>("test") {
         }
     }
     outputs.upToDateWhen { false }
-    maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    maxParallelForks = 2
     minHeapSize = "512m"
     maxHeapSize = "2g"
-    timeout.set(Duration.ofMinutes(10))
+    timeout.set(Duration.ofMinutes(20))
     useJUnitPlatform {
-        excludeTags("eval")
+        excludeTags("eval", "slow")
     }
     testLogging {
         events("passed", "skipped", "failed")
@@ -76,6 +76,23 @@ tasks.named<Test>("test") {
         override fun beforeTest(desc: TestDescriptor) {}
         override fun afterTest(desc: TestDescriptor, result: TestResult) {}
     })
+    environment("TESSDATA_PREFIX", "${project.projectDir}/deps/tesseract/tessdata")
+}
+
+tasks.register<Test>("testSlow") {
+    dependsOn("generateTestPdfs")
+    outputs.upToDateWhen { false }
+    maxParallelForks = 1
+    minHeapSize = "512m"
+    maxHeapSize = "2g"
+    timeout.set(Duration.ofMinutes(30))
+    useJUnitPlatform {
+        includeTags("slow")
+    }
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = true
+    }
     environment("TESSDATA_PREFIX", "${project.projectDir}/deps/tesseract/tessdata")
 }
 

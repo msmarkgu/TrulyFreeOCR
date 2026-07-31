@@ -31,7 +31,7 @@ class MetadataPreserverTest {
 
     @BeforeAll
     static void setup() {
-        extractor = new PageExtractor();
+        extractor = new PageExtractor(150f);
         segmenter = new ImageSegmenter();
         engine = new TesseractProvider();
         assembler = new PDFAssembler();
