@@ -13,7 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Tests for PageExtractor using the generated test PDFs in tests/.
  *
- * Verifies page count, image dimensions (US Letter at 300 DPI ≈ 2550×3300),
+ * Verifies page count, image dimensions (US Letter at 150 DPI ≈ 1275×1650),
  * image type (TYPE_INT_RGB), and resource cleanup via AutoCloseable.
  */
 class PageExtractorTest {
@@ -21,7 +21,7 @@ class PageExtractorTest {
     @Test
     void extractPages_blankPdf_returnsOnePage() throws IOException {
         var pdf = new File("tests/blank.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         List<BufferedImage> pages = extractor.extractPages(pdf);
         assertEquals(1, pages.size());
     }
@@ -29,7 +29,7 @@ class PageExtractorTest {
     @Test
     void extractPages_blankPdf_returnsNonNullImages() throws IOException {
         var pdf = new File("tests/blank.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         List<BufferedImage> pages = extractor.extractPages(pdf);
         assertNotNull(pages.get(0));
     }
@@ -37,18 +37,17 @@ class PageExtractorTest {
     @Test
     void extractPages_blankPdf_returnsCorrectDimensions() throws IOException {
         var pdf = new File("tests/blank.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         List<BufferedImage> pages = extractor.extractPages(pdf);
-        // US Letter at 300 DPI = 2550x3300
-        // US Letter at 300 DPI ~= 2550x3300 (may be off by 1 due to rounding)
-        assertEquals(2550, pages.get(0).getWidth());
-        assertTrue(Math.abs(pages.get(0).getHeight() - 3300) <= 1);
+        // US Letter at 150 DPI = 1275x1650 (may be off by 1 due to rounding)
+        assertEquals(1275, pages.get(0).getWidth());
+        assertTrue(Math.abs(pages.get(0).getHeight() - 1650) <= 1);
     }
 
     @Test
     void extractPages_multiPagePdf_returnsCorrectPageCount() throws IOException {
         var pdf = new File("tests/multi-page.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         List<BufferedImage> pages = extractor.extractPages(pdf);
         assertEquals(3, pages.size());
     }
@@ -56,26 +55,26 @@ class PageExtractorTest {
     @Test
     void extractPages_invalidPath_throwsIOException() {
         var pdf = new File("tests/nonexistent.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         assertThrows(IOException.class, () -> extractor.extractPages(pdf));
     }
 
     @Test
     void close_releasesResources() throws IOException {
         var pdf = new File("tests/simple-text.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         extractor.extractPages(pdf);
         assertDoesNotThrow(() -> extractor.close());
     }
 
     @Test
-    void extractPages_simpleTextPdf_returns300DpiQuality() throws IOException {
+    void extractPages_simpleTextPdf_returns150DpiQuality() throws IOException {
         var pdf = new File("tests/simple-text.pdf");
-        var extractor = new PageExtractor();
+        var extractor = new PageExtractor(150f);
         List<BufferedImage> pages = extractor.extractPages(pdf);
         BufferedImage img = pages.get(0);
-        assertTrue(Math.abs(img.getWidth() - 2550) <= 1);
-        assertTrue(Math.abs(img.getHeight() - 3300) <= 1);
+        assertTrue(Math.abs(img.getWidth() - 1275) <= 1);
+        assertTrue(Math.abs(img.getHeight() - 1650) <= 1);
         assertEquals(BufferedImage.TYPE_INT_RGB, img.getType());
     }
 }

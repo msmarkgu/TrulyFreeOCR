@@ -14,6 +14,8 @@ import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkInfo;
@@ -27,6 +29,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocume
  *   - PDDocumentInformation (title, author, subject, keywords, creator, producer)
  *   - PDDocumentOutline (bookmark tree) — COS-level deep copy
  *   - Per-page PDAnnotation lists — each annotation COS dictionary is duplicated
+ *   - Embedded files (attachments) — COS-level deep copy of the Names/EmbeddedFiles tree
  *   - XML metadata stream (XMP)
  *
  * Limitations:
@@ -39,17 +42,25 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocume
 public class MetadataPreserver {
 
     /**
+     * Counts of metadata elements copied from source to output.
+     */
+    public record PreserveResult(int outlines, int annotations, int embeddedFiles) {}
+
+    /**
      * Copies all metadata from source to output.
      *
      * @param source      The original PDF.
      * @param output      The newly assembled PDF.
      * @param outputPages Output pages indexed to match source pages.
+     * @return Counts of copied elements.
      */
-    public void preserve(PDDocument source, PDDocument output, List<PDPage> outputPages) throws IOException {
+    public PreserveResult preserve(PDDocument source, PDDocument output, List<PDPage> outputPages) throws IOException {
         copyDocumentInfo(source, output);
-        copyOutline(source, output);
-        copyAnnotations(source, outputPages);
+        int outlines = copyOutline(source, output);
+        int annotations = copyAnnotations(source, outputPages);
+        int embeddedFiles = copyEmbeddedFiles(source, output);
         copyXmlMetadata(source, output);
+        return new PreserveResult(outlines, annotations, embeddedFiles);
     }
 
     private void copyDocumentInfo(PDDocument source, PDDocument output) {
@@ -85,18 +96,23 @@ public class MetadataPreserver {
         void accept(T t) throws Exception;
     }
 
-    private void copyOutline(PDDocument source, PDDocument output) throws IOException {
+    private int copyOutline(PDDocument source, PDDocument output) throws IOException {
         PDDocumentOutline srcOutline = source.getDocumentCatalog().getDocumentOutline();
-        if (srcOutline == null) return;
+        if (srcOutline == null) return 0;
 
         // Deep-copy the outline COS dictionary tree
         COSDictionary srcDict = srcOutline.getCOSObject();
         COSDictionary dstDict = deepCopyCOSDictionary(srcDict);
         PDDocumentOutline dstOutline = new PDDocumentOutline(dstDict);
         output.getDocumentCatalog().setDocumentOutline(dstOutline);
+
+        int count = 0;
+        for (var child : srcOutline.children()) count++;
+        return count;
     }
 
-    private void copyAnnotations(PDDocument source, List<PDPage> outputPages) throws IOException {
+    private int copyAnnotations(PDDocument source, List<PDPage> outputPages) throws IOException {
+        int totalAnnotations = 0;
         int pageCount = Math.min(source.getNumberOfPages(), outputPages.size());
         for (int i = 0; i < pageCount; i++) {
             PDPage srcPage = source.getPage(i);
@@ -114,7 +130,30 @@ public class MetadataPreserver {
                 dstAnnots.add(cloned);
             }
             dstPage.getCOSObject().setItem(COSName.ANNOTS, dstAnnots);
+            totalAnnotations += annotations.size();
         }
+        return totalAnnotations;
+    }
+
+    private int copyEmbeddedFiles(PDDocument source, PDDocument output) throws IOException {
+        PDDocumentNameDictionary srcNames = source.getDocumentCatalog().getNames();
+        if (srcNames == null) return 0;
+        PDEmbeddedFilesNameTreeNode srcEmbedded = srcNames.getEmbeddedFiles();
+        if (srcEmbedded == null) return 0;
+
+        COSDictionary srcDict = srcEmbedded.getCOSObject();
+        COSDictionary dstDict = deepCopyCOSDictionary(srcDict);
+        PDEmbeddedFilesNameTreeNode dstEmbedded = new PDEmbeddedFilesNameTreeNode(dstDict);
+
+        PDDocumentNameDictionary dstNames = output.getDocumentCatalog().getNames();
+        if (dstNames == null) {
+            dstNames = new PDDocumentNameDictionary(output.getDocumentCatalog());
+            output.getDocumentCatalog().setNames(dstNames);
+        }
+        dstNames.setEmbeddedFiles(dstEmbedded);
+
+        var names = srcEmbedded.getNames();
+        return names != null ? names.size() : 0;
     }
 
     private void copyXmlMetadata(PDDocument source, PDDocument output) throws IOException {

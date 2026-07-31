@@ -11,6 +11,8 @@ import java.util.List;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,7 +31,7 @@ class MetadataPreserverTest {
 
     @BeforeAll
     static void setup() {
-        extractor = new PageExtractor();
+        extractor = new PageExtractor(150f);
         segmenter = new ImageSegmenter();
         engine = new TesseractProvider();
         assembler = new PDFAssembler();
@@ -138,6 +140,71 @@ class MetadataPreserverTest {
                 assertEquals(srcCount, dstCount,
                         "Page " + (i + 1) + " annotation count should match");
             }
+        }
+    }
+
+    @Test
+    void preserve_copiesEmbeddedFiles() throws IOException {
+        File input = new File("tests/with-attachments.pdf");
+        var pages = extractor.extractPages(input);
+        var backgrounds = pages.stream()
+                .map(segmenter::segment)
+                .map(SegmentedImage::getCleanedBackground)
+                .toList();
+        var ocrResults = ocrPages(engine, pages);
+
+        try (PDDocument source = Loader.loadPDF(input);
+             PDDocument output = assembler.assemble(input, backgrounds, null, ocrResults, false)) {
+            List<PDPage> outPages = new ArrayList<>();
+            for (int i = 0; i < output.getNumberOfPages(); i++) {
+                outPages.add(output.getPage(i));
+            }
+            preserver.preserve(source, output, outPages);
+
+            // Verify embedded files were copied
+            PDDocumentNameDictionary srcNames = source.getDocumentCatalog().getNames();
+            PDDocumentNameDictionary dstNames = output.getDocumentCatalog().getNames();
+            assertNotNull(srcNames, "Source should have names dictionary");
+            PDEmbeddedFilesNameTreeNode srcEmbedded = srcNames.getEmbeddedFiles();
+            assertNotNull(srcEmbedded, "Source should have embedded files");
+
+            assertNotNull(dstNames, "Output should have names dictionary after preserve");
+            PDEmbeddedFilesNameTreeNode dstEmbedded = dstNames.getEmbeddedFiles();
+            assertNotNull(dstEmbedded, "Output should have embedded files after preserve");
+
+            // Check count matches
+            var srcMap = srcEmbedded.getNames();
+            var dstMap = dstEmbedded.getNames();
+            assertNotNull(srcMap, "Source should have embedded file names");
+            assertNotNull(dstMap, "Output should have embedded file names");
+            assertEquals(srcMap.size(), dstMap.size(), "Embedded file count should match");
+
+            // Check file names match
+            assertEquals(srcMap.keySet(), dstMap.keySet(), "Embedded file names should match");
+        }
+    }
+
+    @Test
+    void preserve_returnsCounts() throws IOException {
+        File input = new File("tests/with-attachments.pdf");
+        var pages = extractor.extractPages(input);
+        var backgrounds = pages.stream()
+                .map(segmenter::segment)
+                .map(SegmentedImage::getCleanedBackground)
+                .toList();
+        var ocrResults = ocrPages(engine, pages);
+
+        try (PDDocument source = Loader.loadPDF(input);
+             PDDocument output = assembler.assemble(input, backgrounds, null, ocrResults, false)) {
+            List<PDPage> outPages = new ArrayList<>();
+            for (int i = 0; i < output.getNumberOfPages(); i++) {
+                outPages.add(output.getPage(i));
+            }
+            var result = preserver.preserve(source, output, outPages);
+
+            // with-attachments.pdf has 2 bookmarks and 2 embedded files
+            assertEquals(2, result.outlines(), "Should report 2 bookmarks");
+            assertEquals(2, result.embeddedFiles(), "Should report 2 embedded files");
         }
     }
 }

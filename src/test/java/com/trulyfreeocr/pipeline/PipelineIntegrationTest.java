@@ -13,6 +13,8 @@ import java.util.List;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
+import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -21,6 +23,7 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import com.trulyfreeocr.model.PageResult;
@@ -42,7 +45,7 @@ class PipelineIntegrationTest {
 
     @BeforeEach
     void setup() {
-        extractor = new PageExtractor();
+        extractor = new PageExtractor(150f);
         segmenter = new ImageSegmenter();
         engine = new TesseractProvider();
         assembler = new PDFAssembler();
@@ -236,6 +239,36 @@ class PipelineIntegrationTest {
         }
     }
 
+    @Test
+    void fullPipeline_withAttachments_outputPreservesEmbeddedFiles() throws IOException {
+        File input = new File("tests/with-attachments.pdf");
+        assertTrue(input.exists(), "Test PDF not found: " + input);
+
+        var pages = extractor.extractPages(input);
+        var segmented = pages.stream().map(segmenter::segment).toList();
+        var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+        var ocrResults = processOcr(engine, pages);
+
+        try (PDDocument source = Loader.loadPDF(input);
+             PDDocument output = assembler.assemble(input, backgrounds, null, ocrResults, false)) {
+
+            // Verify embedded files are preserved via finishAssembly -> preserve
+            PDDocumentNameDictionary srcNames = source.getDocumentCatalog().getNames();
+            PDEmbeddedFilesNameTreeNode srcEmbedded = srcNames != null ? srcNames.getEmbeddedFiles() : null;
+            assertNotNull(srcEmbedded, "Source should have embedded files");
+
+            PDDocumentNameDictionary dstNames = output.getDocumentCatalog().getNames();
+            PDEmbeddedFilesNameTreeNode dstEmbedded = dstNames != null ? dstNames.getEmbeddedFiles() : null;
+            assertNotNull(dstEmbedded, "Output should preserve embedded files");
+
+            var srcMap = srcEmbedded.getNames();
+            var dstMap = dstEmbedded.getNames();
+            assertNotNull(srcMap, "Source should have embedded file names");
+            assertNotNull(dstMap, "Output should have embedded file names");
+            assertEquals(srcMap.size(), dstMap.size(), "Embedded file count should match");
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     @FunctionalInterface
@@ -338,6 +371,55 @@ class PipelineIntegrationTest {
                 "MRC-only output should preserve searchable text");
             assertTrue(outText.contains("fox"),
                 "MRC-only output should contain 'fox'");
+        }
+    }
+
+    @Test
+    @Tag("slow")
+    void mrcOnRealWorldDocs_doesNotCrash() throws IOException {
+        File realWorldDir = new File("tests/test-files/real-world");
+        assertTrue(realWorldDir.isDirectory(),
+            "Real-world test directory not found: " + realWorldDir.getAbsolutePath());
+
+        File[] pdfs = realWorldDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".pdf"));
+        assertNotNull(pdfs, "Should list files in real-world directory");
+        assertTrue(pdfs.length > 0, "Should find at least one real-world PDF");
+
+        for (File input : pdfs) {
+            // Skip documents with > 30 pages to keep test runtime reasonable
+            int pageCount;
+            try (PDDocument quickDoc = Loader.loadPDF(input)) {
+                pageCount = quickDoc.getNumberOfPages();
+            }
+            if (pageCount > 30) {
+                System.out.println("  Skipping " + input.getName() + " (" + pageCount + " pages)");
+                continue;
+            }
+
+            System.out.println("  Testing MRC on " + input.getName() + " (" + pageCount + " pages)...");
+            var pages = extractor.extractPages(input);
+            assertNotNull(pages);
+            assertFalse(pages.isEmpty());
+
+            var segmented = pages.stream().map(segmenter::segment).toList();
+            var backgrounds = segmented.stream().map(SegmentedImage::getCleanedBackground).toList();
+            var foregroundMasks = segmented.stream().map(SegmentedImage::getForegroundMask).toList();
+            var ocrResults = processOcr(engine, pages);
+
+            PDFAssembler mrcAssembler = new PDFAssembler();
+            mrcAssembler.setBackgroundScale(0.5);
+
+            assertDoesNotThrow(() -> {
+                try (PDDocument output = mrcAssembler.assemble(input,
+                        backgrounds, foregroundMasks, ocrResults, false)) {
+                    assertEquals(pages.size(), output.getNumberOfPages(),
+                        "Page count should match for " + input.getName());
+
+                    PDFTextStripper stripper = new PDFTextStripper();
+                    String text = stripper.getText(output);
+                    assertNotNull(text, "Text should be extractable from " + input.getName());
+                }
+            }, "MRC pipeline should not throw on " + input.getName());
         }
     }
 }

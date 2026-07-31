@@ -2,6 +2,8 @@ package com.trulyfreeocr.pipeline;
 
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,8 +14,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.stream.ImageInputStream;
+
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -22,8 +30,11 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import com.trulyfreeocr.model.PageResult;
 import com.trulyfreeocr.model.TextBlock;
@@ -296,20 +307,20 @@ class PDFAssemblerRegressionTest {
     }
 
     /**
-     * Regression test for the JBIG2-globals stream caching (Bug 2).
+     * Regression test for the JBIG2-globals stream caching.
      *
-     * The pre-fix code created a brand-new COSStream for the global symbol
-     * dictionary on every single page, embedding N identical copies in the PDF.
-     * The fix caches the stream in the PDFAssembler instance and reuses the
-     * same COSStream reference across all pages.
+     * The pre-fix code concatenated the global symbol dictionary into each
+     * page's stream, embedding N identical copies in the PDF.  The fix stores
+     * the global dictionary as a separate /JBIG2Globals stream and references
+     * it via DecodeParms, sharing one copy across all pages.
      *
      * This test assembles two JBIG2 pages and verifies:
-     * 1. The cached stream field is non-null (was created at least once).
-     * 2. Both pages' /JBIG2Globals references point to the same COSStream
-     *    instance, proving the cache hit.
+     * 1. Each page references a /JBIG2Globals stream via DecodeParms.
+     * 2. Both pages reference the same COSStream instance (the cache hit).
+     * 3. The image stream contains only page data (no globals prepended).
      */
     @Test
-    void addPageJbig2_embedsGlobalsInPageStream() throws Exception {
+    void addPageJbig2_usesSharedGlobalsReference() throws Exception {
         File source = createSourcePdf();
         int imgW = PAGE_W;
         int imgH = PAGE_H;
@@ -345,7 +356,8 @@ class PDFAssemblerRegressionTest {
 
             assertEquals(2, doc.getNumberOfPages());
 
-            // Verify each page's JBIG2 stream starts with the globals prefix (prepended)
+            // Verify each page references the shared /JBIG2Globals stream via DecodeParms
+            COSBase firstGlobals = null;
             for (int i = 0; i < 2; i++) {
                 PDPage page = doc.getPage(i);
                 boolean foundJbig2 = false;
@@ -355,12 +367,23 @@ class PDFAssemblerRegressionTest {
                         PDImageXObject ximg = (PDImageXObject) xobj;
                         COSBase filter = ximg.getCOSObject().getItem(COSName.FILTER);
                         if (COSName.JBIG2_DECODE.equals(filter)) {
-                            // Verify NO separate /JBIG2Globals reference
-                            assertNull(ximg.getCOSObject().getItem(COSName.JBIG2_GLOBALS),
-                                "Page " + i + " should not reference a separate JBIG2Globals stream");
-                            // Verify the stream has data (combined globals + page)
-                            assertTrue(ximg.getCOSObject().getLength() > globalSym.length,
-                                "Page " + i + " JBIG2 stream should be longer than globals alone");
+                            // Verify /JBIG2Globals is set inside DecodeParms
+                            COSDictionary decodeParms = (COSDictionary)
+                                ximg.getCOSObject().getItem(COSName.DECODE_PARMS);
+                            assertNotNull(decodeParms,
+                                "Page " + i + " should have DecodeParms");
+                            COSBase globalsRef = decodeParms.getItem(COSName.JBIG2_GLOBALS);
+                            assertNotNull(globalsRef,
+                                "Page " + i + " should reference a separate JBIG2Globals stream");
+                            if (firstGlobals == null) {
+                                firstGlobals = globalsRef;
+                            } else {
+                                assertSame(firstGlobals, globalsRef,
+                                    "Both pages should reference the same JBIG2Globals stream");
+                            }
+                            // Verify stream contains only page data (no globals)
+                            assertEquals(ximg.getCOSObject().getLength(), pageData.length,
+                                "Page " + i + " JBIG2 stream should contain only page data");
                             foundJbig2 = true;
                         }
                     }
@@ -618,5 +641,336 @@ class PDFAssemblerRegressionTest {
             assertNotNull(doc, "Assembled document should not be null");
             assertEquals(1, doc.getNumberOfPages());
         }
+    }
+
+    // ── MRC Implementation Tests ─────────────────────────────────────────
+
+    @Test
+    void mrcBackground_usesJpegEncoding() throws IOException {
+        File source = createSourcePdf();
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+
+        List<TextBlock> blocks = Collections.singletonList(
+            new TextBlock("Test", new Rectangle(10, 10, 100, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = Collections.singletonList(fgMask);
+
+        PDFAssembler assembler = new PDFAssembler();
+        try (PDDocument doc = assembler.assemble(source,
+                Collections.singletonList(bg), masks,
+                Collections.singletonList(ocr), false)) {
+            PDPage page = doc.getPage(0);
+            boolean foundBg = false;
+            for (COSName name : page.getResources().getXObjectNames()) {
+                PDXObject xobj = page.getResources().getXObject(name);
+                if (xobj instanceof PDImageXObject img) {
+                    if (!img.getCOSObject().getBoolean(COSName.IMAGE_MASK, false)) {
+                        assertEquals(COSName.DCT_DECODE,
+                            img.getCOSObject().getItem(COSName.FILTER),
+                            "Background image should use DCTDecode (JPEG) filter");
+                        foundBg = true;
+                    }
+                }
+            }
+            assertTrue(foundBg, "No background XObject found");
+        }
+    }
+
+    @Test
+    void mrcBackground_isDownscaled() throws IOException {
+        File source = createSourcePdf();
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+
+        List<TextBlock> blocks = Collections.singletonList(
+            new TextBlock("Test", new Rectangle(10, 10, 100, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = Collections.singletonList(fgMask);
+
+        PDFAssembler assembler = new PDFAssembler();
+        assembler.setBackgroundScale(0.5);
+        try (PDDocument doc = assembler.assemble(source,
+                Collections.singletonList(bg), masks,
+                Collections.singletonList(ocr), false)) {
+            PDPage page = doc.getPage(0);
+            for (COSName name : page.getResources().getXObjectNames()) {
+                PDXObject xobj = page.getResources().getXObject(name);
+                if (xobj instanceof PDImageXObject img) {
+                    if (!img.getCOSObject().getBoolean(COSName.IMAGE_MASK, false)) {
+                        int expectedW = (int) Math.round(imgW * 0.5);
+                        int expectedH = (int) Math.round(imgH * 0.5);
+                        assertEquals(expectedW, img.getWidth(),
+                            "Background width should be scaled by 0.5");
+                        assertEquals(expectedH, img.getHeight(),
+                            "Background height should be scaled by 0.5");
+                        return;
+                    }
+                }
+            }
+            fail("No background XObject found");
+        }
+    }
+
+    @Test
+    void mrcBackground_chromaIs420() throws IOException {
+        // Assemble a simple MRC document, save, reload, and extract the
+        // raw JPEG bytes from the background XObject to verify 4:2:0.
+        File source = createSourcePdf();
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+
+        List<TextBlock> blocks = Collections.singletonList(
+            new TextBlock("Test", new Rectangle(10, 10, 100, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = Collections.singletonList(fgMask);
+
+        File mrcFile = new File(tempDir, "mrc-chroma-test.pdf");
+        PDFAssembler assembler = new PDFAssembler();
+        try (PDDocument doc = assembler.assemble(source,
+                Collections.singletonList(bg), masks,
+                Collections.singletonList(ocr), false)) {
+            doc.save(mrcFile);
+        }
+
+        // Reload the saved PDF
+        try (PDDocument doc = Loader.loadPDF(mrcFile)) {
+            PDPage page = doc.getPage(0);
+            for (COSName name : page.getResources().getXObjectNames()) {
+                PDXObject xobj = page.getResources().getXObject(name);
+                if (xobj instanceof PDImageXObject img) {
+                    if (!img.getCOSObject().getBoolean(COSName.IMAGE_MASK, false)) {
+                        // Read the raw COS stream bytes (these are JPEG data)
+                        byte[] jpegBytes;
+                        try (InputStream is = ((org.apache.pdfbox.cos.COSStream) img.getCOSObject()).createRawInputStream()) {
+                            jpegBytes = is.readAllBytes();
+                        }
+                        assertTrue(jpegBytes.length > 2,
+                            "JPEG data should be at least 2 bytes");
+                        assertEquals(0xFF, jpegBytes[0] & 0xFF,
+                            "JPEG should start with 0xFF");
+                        assertEquals(0xD8, jpegBytes[1] & 0xFF,
+                            "JPEG should start with SOI marker 0xD8");
+
+                        // Parse the JPEG to find SOF0 marker and subsampling
+                        int pos = 2;
+                        while (pos < jpegBytes.length) {
+                            if ((jpegBytes[pos] & 0xFF) == 0xFF) {
+                                int marker = jpegBytes[pos + 1] & 0xFF;
+                                if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+                                    // SOF marker: skip segment length (2) + precision (1) + height (2) + width (2)
+                                    int numComponents = jpegBytes[pos + 9] & 0xFF;
+                                    int compPos = pos + 10;
+                                    boolean lumaOk = false, chromaOk = false;
+                                    for (int ci = 0; ci < numComponents; ci++) {
+                                        int compId = jpegBytes[compPos] & 0xFF;
+                                        int hSample = (jpegBytes[compPos + 1] >> 4) & 0x0F;
+                                        int vSample = jpegBytes[compPos + 1] & 0x0F;
+                                        if (compId == 0 || compId == 1) {
+                                            // First component is Y (luma)
+                                            assertEquals(2, hSample,
+                                                "Luma H-sampling should be 2");
+                                            assertEquals(2, vSample,
+                                                "Luma V-sampling should be 2");
+                                            lumaOk = true;
+                                        } else {
+                                            assertEquals(1, hSample,
+                                                "Chroma H-sampling should be 1");
+                                            assertEquals(1, vSample,
+                                                "Chroma V-sampling should be 1");
+                                            chromaOk = true;
+                                        }
+                                        compPos += 3;
+                                    }
+                                    assertTrue(lumaOk, "Luma component not found in SOF");
+                                    assertTrue(chromaOk, "Chroma components not found");
+                                    return;
+                                }
+                                if (marker == 0xD9) break; // EOI
+                                // Skip non-SOF marker: length at pos+2 (big-endian)
+                                int segLen = ((jpegBytes[pos + 2] & 0xFF) << 8)
+                                           | (jpegBytes[pos + 3] & 0xFF);
+                                pos += 2 + segLen;
+                            } else {
+                                pos++;
+                            }
+                        }
+                        fail("SOF marker not found in JPEG data");
+                    }
+                }
+            }
+            fail("No background XObject found");
+        }
+    }
+
+    @Test
+    void mrcCompression_reducesFileSize() throws IOException {
+        // Use a multi-page source for measurable MRC savings
+        File pdf = new File(tempDir, "mrc-compare-source.pdf");
+        try (PDDocument d = new PDDocument()) {
+            for (int i = 0; i < 3; i++) {
+                d.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            }
+            d.save(pdf);
+        }
+
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+        List<TextBlock> blocks = Collections.singletonList(
+            new TextBlock("Test", new Rectangle(10, 10, 100, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        List<PageResult> ocrResults = new ArrayList<>();
+        ocrResults.add(ocr); ocrResults.add(ocr); ocrResults.add(ocr);
+
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+        List<BufferedImage> bgs = new ArrayList<>();
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            bgs.add(bg);
+            masks.add(fgMask);
+        }
+
+        // MRC mode: with foreground mask + background scaling
+        PDFAssembler mrcAssembler = new PDFAssembler();
+        mrcAssembler.setBackgroundScale(0.33);
+        File mrcFile = new File(tempDir, "mrc-output.pdf");
+        try (PDDocument doc = mrcAssembler.assemble(pdf, bgs, masks, ocrResults, false)) {
+            doc.save(mrcFile);
+        }
+
+        // Non-MRC mode: no foreground mask
+        PDFAssembler plainAssembler = new PDFAssembler();
+        File plainFile = new File(tempDir, "plain-output.pdf");
+        try (PDDocument doc = plainAssembler.assemble(pdf, bgs, null, ocrResults, false)) {
+            doc.save(plainFile);
+        }
+
+        assertTrue(mrcFile.exists() && mrcFile.length() > 0, "MRC output should exist");
+        assertTrue(plainFile.exists() && plainFile.length() > 0, "Plain output should exist");
+        assertTrue(mrcFile.length() < plainFile.length(),
+            "MRC output (" + mrcFile.length() + " bytes) should be smaller than non-MRC ("
+            + plainFile.length() + " bytes)");
+    }
+
+    @Test
+    void mrcForegroundMask_preservesTextSharpness() throws IOException {
+        int imgW = 200;
+        int imgH = 100;
+
+        // Background: entirely white, so lossy JPEG can't introduce dark pixels
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_3BYTE_BGR);
+        java.awt.Graphics2D g = bg.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, imgW, imgH);
+        g.dispose();
+
+        // Foreground mask: white background (transparent) + black rectangle (opaque)
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        java.awt.Graphics2D mg = fgMask.createGraphics();
+        mg.setColor(java.awt.Color.WHITE);
+        mg.fillRect(0, 0, imgW, imgH);
+        mg.setColor(java.awt.Color.BLACK);
+        mg.fillRect(20, 20, 60, 30);
+        mg.dispose();
+
+        File source = createSourcePdf();
+        List<TextBlock> blocks = Collections.singletonList(
+            new TextBlock("x", new Rectangle(20, 20, 60, 30), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+
+        PDFAssembler assembler = new PDFAssembler();
+        assembler.setBackgroundScale(0.33);
+        assembler.setBgSmoothSigma(3.0f);
+
+        try (PDDocument doc = assembler.assemble(source,
+                Collections.singletonList(bg), Collections.singletonList(fgMask),
+                Collections.singletonList(ocr), false)) {
+            PDFRenderer renderer = new PDFRenderer(doc);
+            // At 72 DPI, rendered image = 400 × 600 px (page is 400×600 pt)
+            BufferedImage rendered = renderer.renderImageWithDPI(0, 72);
+
+            // Mask rectangle in image coords (20,20)-(80,50), image is 200×100.
+            // PDF page is 400×600, so mask scales: scaleX=2, scaleY=6.
+            // PDF coords (bottom-left origin):
+            //   x: 20/200*400=40 to 80/200*400=160
+            //   y: (100-50)/100*600=300 to (100-20)/100*600=480
+            // Rendered image (top-left origin) flips y: 600-480=120 to 600-300=300
+            // Pixel (100,200) is well inside that rectangle → should be dark
+            int textPixel = rendered.getRGB(100, 200);
+            int textR = (textPixel >> 16) & 0xFF;
+            assertTrue(textR < 64,
+                "Text pixel should be dark (R=" + textR + "), mask should overlay black");
+
+            // Background area far from mask rectangle at (300,100) should be
+            // the JPEG-compressed white background, still near-white.
+            int bgPixel = rendered.getRGB(300, 100);
+            int bgR = (bgPixel >> 16) & 0xFF;
+            assertTrue(bgR > 192,
+                "Background pixel should be light (R=" + bgR + "), background shows through");
+        }
+    }
+
+    @Test
+    void jbig2_compressesBetterThanCcitt() throws IOException {
+        // Probe whether jbig2enc is available
+        JBIG2Compressor probe = new JBIG2Compressor();
+        BufferedImage probeMask = new BufferedImage(10, 10, BufferedImage.TYPE_BYTE_BINARY);
+        probeMask.setRGB(5, 5, 0xFF000000);
+        var probeResult = probe.compress(probeMask);
+        assumeTrue(probeResult.isJbig2(), "jbig2enc not available — skipping JBIG2 comparison test");
+
+        // Create a 2-page source
+        File pdf = new File(tempDir, "jbig2-compare-source.pdf");
+        try (PDDocument d = new PDDocument()) {
+            d.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            d.addPage(new PDPage(new PDRectangle(PAGE_W, PAGE_H)));
+            d.save(pdf);
+        }
+
+        int imgW = PAGE_W;
+        int imgH = PAGE_H;
+        List<TextBlock> blocks = new ArrayList<>();
+        // Same word on both pages so JBIG2 symbol reuse helps
+        blocks.add(new TextBlock("Test", new Rectangle(10, 10, 100, 40), 0.95));
+        PageResult ocr = new PageResult(1, imgW, imgH, blocks);
+        List<PageResult> ocrResults = new ArrayList<>();
+        ocrResults.add(ocr);
+        ocrResults.add(ocr);
+
+        BufferedImage bg = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_GRAY);
+        List<BufferedImage> bgs = new ArrayList<>();
+        bgs.add(bg);
+        bgs.add(bg);
+
+        BufferedImage fgMask = new BufferedImage(imgW, imgH, BufferedImage.TYPE_BYTE_BINARY);
+        List<BufferedImage> masks = new ArrayList<>();
+        masks.add(fgMask);
+        masks.add(fgMask);
+
+        // CCITT G4 path (no compressor)
+        PDFAssembler ccittAssembler = new PDFAssembler();
+        File ccittFile = new File(tempDir, "ccitt-output.pdf");
+        try (PDDocument doc = ccittAssembler.assemble(pdf, bgs, masks, ocrResults, false)) {
+            doc.save(ccittFile);
+        }
+
+        // JBIG2 path (with shared compressor)
+        PDFAssembler jbig2Assembler = new PDFAssembler();
+        jbig2Assembler.setCompressor(new JBIG2Compressor());
+        File jbig2File = new File(tempDir, "jbig2-output.pdf");
+        try (PDDocument doc = jbig2Assembler.assemble(pdf, bgs, masks, ocrResults, false)) {
+            doc.save(jbig2File);
+        }
+
+        assertTrue(jbig2File.length() < ccittFile.length(),
+            "JBIG2 output (" + jbig2File.length() + " bytes) should be smaller than CCITT ("
+            + ccittFile.length() + " bytes) for multi-page with repeated content");
     }
 }
