@@ -12,13 +12,17 @@ import java.io.OutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOMetadata;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -31,8 +35,10 @@ import javax.xml.transform.stream.StreamResult;
 import org.apache.fontbox.ttf.TrueTypeCollection;
 import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -52,6 +58,7 @@ import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.util.Matrix;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import com.trulyfreeocr.model.PageResult;
@@ -94,6 +101,7 @@ public class PDFAssembler {
     private float bgSmoothSigma;
     private String producer;
     private int skippedGlyphCount;
+    private PDStream jbig2GlobalStream;
 
     public PDFAssembler() {
         this("HELVETICA", 1f);
@@ -165,9 +173,43 @@ public class PDFAssembler {
             param.setCompressionQuality(quality);
             param.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
 
+            // Force 4:2:0 chroma subsampling via standard JPEG metadata
+            ImageTypeSpecifier type = ImageTypeSpecifier.createFromRenderedImage(toEncode);
+            IIOMetadata meta = writer.getDefaultImageMetadata(type, param);
+            if (meta != null && !meta.isReadOnly()) {
+                Element tree = (Element) meta.getAsTree("javax_imageio_jpeg_image_1.0");
+                NodeList markers = tree.getElementsByTagName("markerSequence");
+                if (markers.getLength() > 0) {
+                    Element markerSeq = (Element) markers.item(0);
+                    NodeList sofList = markerSeq.getElementsByTagName("sof");
+                    if (sofList.getLength() > 0) {
+                        Element sof = (Element) sofList.item(0);
+                        Element marker = (Element) sof.getParentNode();
+                        NodeList childNodes = marker.getChildNodes();
+                        for (int ci = 0; ci < childNodes.getLength(); ci++) {
+                            Node child = childNodes.item(ci);
+                            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                                Element comp = (Element) child;
+                                if (comp.getAttribute("componentId").equals("1")
+                                        || comp.getAttribute("componentId").equals("2")) {
+                                    comp.setAttribute("HsamplingFactor", "1");
+                                    comp.setAttribute("VsamplingFactor", "1");
+                                } else if (comp.getAttribute("componentId").equals("0")) {
+                                    comp.setAttribute("HsamplingFactor", "2");
+                                    comp.setAttribute("VsamplingFactor", "2");
+                                }
+                            }
+                        }
+                    }
+                }
+                meta.setFromTree("javax_imageio_jpeg_image_1.0", tree);
+            }
+
             ByteArrayOutputStream baos = new ByteArrayOutputStream(8192);
-            writer.setOutput(new MemoryCacheImageOutputStream(baos));
-            writer.write(null, new IIOImage(toEncode, null, null), param);
+            try (MemoryCacheImageOutputStream mcios = new MemoryCacheImageOutputStream(baos)) {
+                writer.setOutput(mcios);
+                writer.write(null, new IIOImage(toEncode, null, meta), param);
+            }
 
             return PDImageXObject.createFromByteArray(doc, baos.toByteArray(), "background");
         } finally {
@@ -212,24 +254,34 @@ public class PDFAssembler {
             temp.setRGB(0, y, w, 1, dstRow, 0, w);
         }
 
-        // Vertical pass (bulk array)
-        int[] pixels = temp.getRGB(0, 0, w, h, null, 0, w);
-        int[] outPixels = new int[w * h];
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                float r = 0, g = 0, b = 0;
-                for (int k = -radius; k <= radius; k++) {
-                    int sy = Math.max(0, Math.min(h - 1, y + k));
-                    int px = pixels[sy * w + x];
-                    float f = kernel[k + radius];
-                    r += f * ((px >> 16) & 0xFF);
-                    g += f * ((px >> 8) & 0xFF);
-                    b += f * (px & 0xFF);
+        // Vertical pass (banded to reduce peak memory)
+        int BAND_HEIGHT = 64;
+        for (int bandStart = 0; bandStart < h; bandStart += BAND_HEIGHT) {
+            int bandEnd = Math.min(h, bandStart + BAND_HEIGHT);
+            int readStart = Math.max(0, bandStart - radius);
+            int readEnd = Math.min(h, bandEnd + radius);
+            int readH = readEnd - readStart;
+            int bandH = bandEnd - bandStart;
+
+            int[] pixels = temp.getRGB(0, readStart, w, readH, null, 0, w);
+            int[] outPixels = new int[w * bandH];
+
+            for (int y = bandStart; y < bandEnd; y++) {
+                for (int x = 0; x < w; x++) {
+                    float r = 0, g = 0, b = 0;
+                    for (int k = -radius; k <= radius; k++) {
+                        int sy = Math.max(0, Math.min(h - 1, y + k));
+                        int px = pixels[(sy - readStart) * w + x];
+                        float f = kernel[k + radius];
+                        r += f * ((px >> 16) & 0xFF);
+                        g += f * ((px >> 8) & 0xFF);
+                        b += f * (px & 0xFF);
+                    }
+                    outPixels[(y - bandStart) * w + x] = 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b;
                 }
-                outPixels[y * w + x] = 0xFF000000 | ((int) r << 16) | ((int) g << 8) | (int) b;
             }
+            result.setRGB(0, bandStart, w, bandH, outPixels, 0, w);
         }
-        result.setRGB(0, 0, w, h, outPixels, 0, w);
 
         return result;
     }
@@ -242,6 +294,10 @@ public class PDFAssembler {
      * This reproduces the original text pixels at full sharpness, while
      * the background layer carries the cleaned (de-speckled) page image.
      *
+     * Backgrounds and foreground masks are consumed lazily via Iterator
+     * so callers can supply images one at a time without holding all
+     * page bitmaps in memory at once.
+     *
      * @param sourcePdf       Original PDF (for per-page media boxes).
      * @param backgrounds     Per-page cleaned background images.
      * @param foregroundMasks Per-page binary foreground masks (TYPE_BYTE_BINARY,
@@ -251,8 +307,8 @@ public class PDFAssembler {
      * @return A new PDDocument with foreground mask overlay and searchable text.
      */
     public PDDocument assemble(File sourcePdf,
-                               List<BufferedImage> backgrounds,
-                               List<BufferedImage> foregroundMasks,
+                               Iterator<BufferedImage> backgrounds,
+                               Iterator<BufferedImage> foregroundMasks,
                                List<PageResult> ocrResults,
                                boolean usePdfa) throws IOException {
         PDDocument output = new PDDocument();
@@ -261,8 +317,8 @@ public class PDFAssembler {
         try (PDDocument source = Loader.loadPDF(sourcePdf)) {
             int pageCount = source.getNumberOfPages();
             for (int i = 0; i < pageCount; i++) {
-                BufferedImage bg = backgrounds.get(i);
-                BufferedImage fg = foregroundMasks != null ? foregroundMasks.get(i) : null;
+                BufferedImage bg = backgrounds.next();
+                BufferedImage fg = foregroundMasks != null && foregroundMasks.hasNext() ? foregroundMasks.next() : null;
                 PDPage page = addPage(output, source, i, bg, fg, ocrResults.get(i));
                 outPages.add(page);
             }
@@ -270,6 +326,21 @@ public class PDFAssembler {
         }
 
         return output;
+    }
+
+    /**
+     * Convenience overload accepting Lists.  Each list is converted to an
+     * iterator so the semantics are identical to the Iterator-based version.
+     */
+    public PDDocument assemble(File sourcePdf,
+                               List<BufferedImage> backgrounds,
+                               List<BufferedImage> foregroundMasks,
+                               List<PageResult> ocrResults,
+                               boolean usePdfa) throws IOException {
+        return assemble(sourcePdf,
+            backgrounds.iterator(),
+            foregroundMasks != null ? foregroundMasks.iterator() : null,
+            ocrResults, usePdfa);
     }
 
     /**
@@ -340,8 +411,7 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * baselineRatio(tb)) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
@@ -393,6 +463,7 @@ public class PDFAssembler {
             info.setProducer(newProducer);
         }
         dynamicFont = null;
+        jbig2GlobalStream = null;
         if (skippedGlyphCount > 0) {
             System.out.printf("  Warning: %d words skipped — unsupported glyphs for font.%n", skippedGlyphCount);
             System.out.println("  Set pdf.fontPath in settings.jsonc to a CJK TTF/OTF file (e.g., NotoSansCJKsc-Regular.otf).");
@@ -453,14 +524,21 @@ public class PDFAssembler {
             PDImageXObject bgXObject = encodeBackgroundJpeg(output, background, 0.50f, true);
             cs.drawImage(bgXObject, 0, 0, pageW, pageH);
 
-            // Layer 2: JBIG2 foreground mask — combine globals into page stream
-            // to avoid poppler JBIG2 decoder issues with separate /JBIG2Globals.
+            // Layer 2: JBIG2 foreground mask — store global symbol dictionary
+            // as a separate stream and reference it via /JBIG2Globals in decode parms.
             if (jbig2PageData != null && jbig2GlobalSym != null) {
-                byte[] combined = new byte[jbig2GlobalSym.length + jbig2PageData.length];
-                System.arraycopy(jbig2GlobalSym, 0, combined, 0, jbig2GlobalSym.length);
-                System.arraycopy(jbig2PageData, 0, combined, jbig2GlobalSym.length, jbig2PageData.length);
+                // Create and cache the global symbol stream once per document
+                if (jbig2GlobalStream == null) {
+                    jbig2GlobalStream = new PDStream(output);
+                    try (OutputStream os = jbig2GlobalStream.createOutputStream()) {
+                        os.write(jbig2GlobalSym);
+                    }
+                }
                 PDImageXObject fgImage = createJbig2ImageXObject(output,
-                    combined, fgWidth, fgHeight);
+                    jbig2PageData, fgWidth, fgHeight);
+                COSDictionary decodeParms = new COSDictionary();
+                decodeParms.setItem(COSName.JBIG2_GLOBALS, jbig2GlobalStream);
+                fgImage.getCOSObject().setItem(COSName.DECODE_PARMS, decodeParms);
                 fgImage.getCOSObject().setBoolean(COSName.IMAGE_MASK, true);
                 fgImage.getCOSObject().removeItem(COSName.COLORSPACE);
                 cs.setNonStrokingColor(0f, 0f, 0f);
@@ -477,8 +555,7 @@ public class PDFAssembler {
 
             for (TextBlock tb : ocr.getTextBlocks()) {
                 float x = tb.getBbox().x * scaleX;
-                // Approximate baseline: ~80% down from top of bbox (works for Latin + CJK)
-                float y = pageH - (tb.getBbox().y + tb.getBbox().height * 0.8f) * scaleY;
+                float y = pageH - (tb.getBbox().y + tb.getBbox().height * baselineRatio(tb)) * scaleY;
                 float fontSize = Math.max(tb.getBbox().height * scaleY, minFontSize);
                 cs.setFont(pageFont, fontSize);
                 // Word-level scaling: uniform horizontal stretch to fill bbox
@@ -503,6 +580,33 @@ public class PDFAssembler {
         }
 
         return outPage;
+    }
+
+    private static float baselineRatio(TextBlock tb) {
+        List<float[]> positions = tb.getCharPositions();
+        if (positions != null && !positions.isEmpty()) {
+            float[] bottoms = new float[positions.size()];
+            for (int i = 0; i < positions.size(); i++) {
+                float[] c = positions.get(i);
+                bottoms[i] = c[1] + c[3];
+            }
+            Arrays.sort(bottoms);
+            float median = bottoms[bottoms.length / 2];
+            float ratio = (median - tb.getBbox().y) / (float) tb.getBbox().height;
+            return Math.max(0.5f, Math.min(1.0f, ratio));
+        }
+        String word = tb.getWord();
+        for (int i = 0; i < word.length(); i++) {
+            char cp = word.charAt(i);
+            if ((cp >= 0x4E00 && cp <= 0x9FFF)
+                    || (cp >= 0x3040 && cp <= 0x309F)
+                    || (cp >= 0x30A0 && cp <= 0x30FF)
+                    || (cp >= 0xAC00 && cp <= 0xD7AF)
+                    || (cp >= 0x3400 && cp <= 0x4DBF)) {
+                return 0.85f;
+            }
+        }
+        return 0.75f;
     }
 
     /**
