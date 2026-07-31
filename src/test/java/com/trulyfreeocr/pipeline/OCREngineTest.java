@@ -20,7 +20,7 @@ class OCREngineTest {
 
     @BeforeAll
     static void setup() {
-        extractor = new PageExtractor();
+        extractor = new PageExtractor(150f);
         engine = new TesseractProvider();
     }
 

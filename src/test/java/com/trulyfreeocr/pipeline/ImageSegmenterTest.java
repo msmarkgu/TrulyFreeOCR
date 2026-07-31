@@ -25,7 +25,7 @@ class ImageSegmenterTest {
 
     @BeforeAll
     static void setup() {
-        extractor = new PageExtractor();
+        extractor = new PageExtractor(150f);
         segmenter = new ImageSegmenter();
     }
 
