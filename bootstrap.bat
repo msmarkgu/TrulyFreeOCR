@@ -99,14 +99,10 @@ if not exist "%TESSERACT_DIR%" mkdir "%TESSERACT_DIR%"
 
 if not exist "%TESSERACT_DIR%\tesseract.exe" (
   echo Downloading Tesseract for Windows...
-  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-portable-5.3.3.20231005.zip' -OutFile '%SCRIPT_DIR%tesseract-win.zip'"
-  powershell -NoProfile -Command "Expand-Archive -Path '%SCRIPT_DIR%tesseract-win.zip' -DestinationPath '%TESSERACT_DIR%'"
-  del "%SCRIPT_DIR%tesseract-win.zip"
-  rem Flatten nested directory (portable zip wraps in versioned folder)
-  for /d %%d in ("%TESSERACT_DIR%\tesseract-ocr-w64-portable-*") do (
-    xcopy /E /Y "%%d\*" "%TESSERACT_DIR%\" >nul
-    rmdir /S /Q "%%d"
-  )
+  powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe' -OutFile '%SCRIPT_DIR%tesseract-win-setup.exe'"
+  rem NSIS installer: /S = unattended, /D=target dir (must be last arg, unquoted)
+  "%SCRIPT_DIR%tesseract-win-setup.exe" /S /D=%TESSERACT_DIR%
+  del "%SCRIPT_DIR%tesseract-win-setup.exe"
   echo Tesseract installed to %TESSERACT_DIR%
 ) else (
   echo Tesseract already present
